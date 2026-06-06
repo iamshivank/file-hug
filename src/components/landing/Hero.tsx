@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Bookmark, Search, Sparkles, ArrowRight, ExternalLink } from 'lucide-react';
 
 interface MemoryCard {
@@ -62,9 +63,9 @@ export default function Hero() {
       className="relative min-h-screen flex items-center justify-center overflow-hidden"
     >
       {/* Background effects */}
-      <div className="glow-orb w-[600px] h-[600px] bg-primary top-[-200px] left-[-200px]" />
-      <div className="glow-orb w-[500px] h-[500px] bg-accent bottom-[-150px] right-[-150px]" />
-      <div className="glow-orb w-[300px] h-[300px] bg-primary-light top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-10" />
+      <div className="glow-orb w-150 h-150 bg-primary -top-50 -left-50" />
+      <div className="glow-orb w-125 h-125 bg-accent -bottom-37.5 -right-37.5" />
+      <div className="glow-orb w-75 h-75 bg-primary-light top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-10" />
 
       {/* Grid background */}
       <div className="absolute inset-0 bg-grid opacity-40" />
@@ -105,25 +106,34 @@ export default function Hero() {
 
         {/* CTAs */}
         <div
-          className={`flex flex-col sm:flex-row gap-4 mb-20 transition-all duration-700 delay-300 ${
+          className={`flex flex-col items-center gap-4 mb-20 transition-all duration-700 delay-300 ${
             isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
           }`}
         >
-          <button
-            onClick={scrollToWaitlist}
-            className="group relative px-8 py-4 bg-primary hover:bg-primary-dark text-white font-semibold rounded-xl transition-all duration-300 shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:scale-[1.02] cursor-pointer"
+          <div className="flex flex-col sm:flex-row gap-4">
+            <button
+              onClick={scrollToWaitlist}
+              className="group relative px-8 py-4 bg-primary hover:bg-primary-dark text-white font-semibold rounded-xl transition-all duration-300 shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:scale-[1.02] cursor-pointer"
+            >
+              <span className="flex items-center gap-2">
+                Join Waitlist
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </span>
+            </button>
+            <button
+              onClick={scrollToHowItWorks}
+              className="px-8 py-4 glass hover:bg-surface-hover text-foreground font-semibold rounded-xl transition-all duration-300 hover:border-border-strong cursor-pointer"
+            >
+              See How It Works
+            </button>
+          </div>
+          <Link
+            href="/app"
+            className="text-sm text-muted hover:text-primary-light transition-colors flex items-center gap-1.5 group"
           >
-            <span className="flex items-center gap-2">
-              Join Waitlist
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </span>
-          </button>
-          <button
-            onClick={scrollToHowItWorks}
-            className="px-8 py-4 glass hover:bg-surface-hover text-foreground font-semibold rounded-xl transition-all duration-300 hover:border-border-strong cursor-pointer"
-          >
-            See How It Works
-          </button>
+            <span>Try the demo app</span>
+            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+          </Link>
         </div>
 
         {/* Memory Cards */}
@@ -137,13 +147,13 @@ export default function Hero() {
             return (
               <div
                 key={card.title}
-                className={`group glass rounded-2xl p-6 hover:border-border-strong transition-all duration-500 hover:translate-y-[-4px] hover:shadow-lg hover:shadow-primary/10 ${
+                className={`group glass rounded-2xl p-6 hover:border-border-strong transition-all duration-500 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/10 ${
                   index === 1 ? 'animate-float-delayed' : index === 2 ? 'animate-float-slow' : 'animate-float'
                 }`}
                 style={{ animationDelay: `${index * 0.5}s` }}
               >
                 <div
-                  className={`w-10 h-10 rounded-xl bg-gradient-to-br ${card.gradient} flex items-center justify-center mb-4`}
+                  className={`w-10 h-10 rounded-xl bg-linear-to-br ${card.gradient} flex items-center justify-center mb-4`}
                 >
                   <IconComponent className="w-5 h-5 text-primary-light" />
                 </div>
@@ -162,7 +172,7 @@ export default function Hero() {
       </div>
 
       {/* Bottom fade */}
-      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background to-transparent" />
+      <div className="absolute bottom-0 left-0 right-0 h-32 bg-linear-to-t from-background to-transparent" />
     </section>
   );
 }

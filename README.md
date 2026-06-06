@@ -23,6 +23,8 @@ This is the first sprint of File Hug: a beautiful SaaS landing page with waitlis
 - ✅ REST API with proper error handling
 - ✅ Fully responsive (mobile-first)
 - ✅ Smooth scroll animations
+- ✅ Social proof counter — live member count shown above the form
+- ✅ Waitlist position reveal — shows your position number after joining
 
 ---
 
@@ -83,7 +85,7 @@ MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/filehug?retryW
 
 ## Project Structure
 
-```
+```text
 src/
 ├── app/
 │   ├── layout.tsx          # Root layout with SEO
@@ -120,6 +122,21 @@ src/
 
 ## API Reference
 
+### `GET /api/waitlist`
+
+Returns the current number of waitlist members. Used by the frontend to show social proof.
+
+**Success Response (200):**
+
+```json
+{
+  "success": true,
+  "data": { "count": 47 }
+}
+```
+
+---
+
 ### `POST /api/waitlist`
 
 Add a user to the waitlist.
@@ -139,7 +156,8 @@ Add a user to the waitlist.
 {
   "success": true,
   "data": {
-    "message": "Successfully joined the waitlist!"
+    "message": "Successfully joined the waitlist!",
+    "position": 48
   }
 }
 ```

@@ -10,6 +10,15 @@ export interface WaitlistFormData {
   email: string;
 }
 
+export interface WaitlistSuccessData {
+  message: string;
+  position: number;
+}
+
+export interface WaitlistCountData {
+  count: number;
+}
+
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;

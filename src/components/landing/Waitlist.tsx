@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, FormEvent } from 'react';
-import { ArrowRight, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
-import type { ApiResponse } from '@/types/waitlist.types';
+import { ArrowRight, CheckCircle2, Loader2, AlertCircle, Users } from 'lucide-react';
+import type { ApiResponse, WaitlistSuccessData, WaitlistCountData } from '@/types/waitlist.types';
 
 type FormStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -13,6 +13,8 @@ export default function Waitlist() {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<FormStatus>('idle');
   const [message, setMessage] = useState('');
+  const [position, setPosition] = useState<number | null>(null);
+  const [count, setCount] = useState<number | null>(null);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -31,6 +33,17 @@ export default function Waitlist() {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    fetch('/api/waitlist')
+      .then((res) => res.json())
+      .then((data: ApiResponse<WaitlistCountData>) => {
+        if (data.success && data.data) {
+          setCount(data.data.count);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setStatus('loading');
@@ -43,11 +56,13 @@ export default function Waitlist() {
         body: JSON.stringify({ name: name.trim(), email: email.trim() }),
       });
 
-      const data: ApiResponse = await response.json();
+      const data: ApiResponse<WaitlistSuccessData> = await response.json();
 
-      if (data.success) {
+      if (data.success && data.data) {
         setStatus('success');
-        setMessage('You\'re on the list! We\'ll be in touch soon. 🎉');
+        setMessage("You're on the list! We'll be in touch soon.");
+        setPosition(data.data.position);
+        setCount(data.data.position);
         setName('');
         setEmail('');
       } else {
@@ -63,7 +78,7 @@ export default function Waitlist() {
   return (
     <section ref={sectionRef} id="waitlist" className="relative section-padding">
       {/* Glow effects */}
-      <div className="glow-orb w-[600px] h-[600px] bg-primary top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-15" />
+      <div className="glow-orb w-150 h-150 bg-primary top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-15" />
 
       <div className="relative z-10 max-w-xl mx-auto">
         {/* Heading */}
@@ -82,6 +97,17 @@ export default function Waitlist() {
           <p className="text-muted-light text-lg">
             Join the waitlist. Get early access when we launch.
           </p>
+
+          {count !== null && count > 0 && (
+            <div className="mt-5 inline-flex items-center gap-2 glass px-4 py-2 rounded-full text-sm">
+              <Users className="w-4 h-4 text-primary-light" />
+              <span className="text-muted-light">
+                Join{' '}
+                <span className="text-primary-light font-semibold">{count.toLocaleString()}+</span>
+                {' '}people already waiting
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Form */}
@@ -92,10 +118,18 @@ export default function Waitlist() {
         >
           <div className="gradient-border p-8 rounded-2xl">
             {status === 'success' ? (
-              <div className="text-center py-8 animate-fade-in">
-                <CheckCircle2 className="w-16 h-16 text-success mx-auto mb-4" />
-                <h3 className="text-xl font-bold text-foreground mb-2">Welcome aboard!</h3>
-                <p className="text-muted-light">{message}</p>
+              <div className="text-center py-8 animate-fade-in space-y-4">
+                <CheckCircle2 className="w-14 h-14 text-success mx-auto" />
+
+                <div>
+                  <p className="text-5xl font-bold gradient-text">#{position}</p>
+                  <p className="text-muted text-sm mt-1">on the waitlist</p>
+                </div>
+
+                <div>
+                  <h3 className="text-xl font-bold text-foreground">Welcome aboard!</h3>
+                  <p className="text-muted-light mt-1">{message}</p>
+                </div>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-5">

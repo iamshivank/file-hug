@@ -1,5 +1,5 @@
 import { waitlistRepository } from '@/repositories/waitlist.repository';
-import { WaitlistFormData, ApiResponse } from '@/types/waitlist.types';
+import { WaitlistFormData, ApiResponse, WaitlistSuccessData } from '@/types/waitlist.types';
 
 export class WaitlistService {
   private validateEmail(email: string): boolean {
@@ -7,7 +7,7 @@ export class WaitlistService {
     return emailRegex.test(email);
   }
 
-  async addToWaitlist(data: WaitlistFormData): Promise<ApiResponse> {
+  async addToWaitlist(data: WaitlistFormData): Promise<ApiResponse<WaitlistSuccessData>> {
     const name = data.name?.trim();
     const email = data.email?.trim().toLowerCase();
 
@@ -33,8 +33,8 @@ export class WaitlistService {
     }
 
     try {
-      await waitlistRepository.create({ name, email });
-      return { success: true, data: { message: 'Successfully joined the waitlist!' } };
+      const { position } = await waitlistRepository.create({ name, email });
+      return { success: true, data: { message: 'Successfully joined the waitlist!', position } };
     } catch (error) {
       if ((error as { code?: number }).code === 11000) {
         return { success: false, error: 'This email is already on the waitlist.' };

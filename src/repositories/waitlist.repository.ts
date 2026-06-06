@@ -3,10 +3,11 @@ import Waitlist, { IWaitlist } from '@/models/Waitlist';
 import { WaitlistFormData } from '@/types/waitlist.types';
 
 export class WaitlistRepository {
-  async create(data: WaitlistFormData): Promise<IWaitlist> {
+  async create(data: WaitlistFormData): Promise<{ entry: IWaitlist; position: number }> {
     await connectToDatabase();
     const entry = await Waitlist.create(data);
-    return entry;
+    const position = await Waitlist.countDocuments();
+    return { entry, position };
   }
 
   async findByEmail(email: string): Promise<IWaitlist | null> {
