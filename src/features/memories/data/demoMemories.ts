@@ -3,7 +3,7 @@ import { MemoryData } from '../types/memory.types';
 export const DEMO_MEMORIES: MemoryData[] = [
   {
     _id: 'demo-1',
-    content: 'https://www.instagram.com/reel/C8xKj1pPa2Q/',
+    content: 'https://www.instagram.com/reels/C8xKj1pPa2Q/',
     type: 'url',
     title: 'Instagram Reel',
     tags: ['instagram', 'reel'],

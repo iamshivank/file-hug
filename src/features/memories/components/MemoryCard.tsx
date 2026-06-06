@@ -1,7 +1,8 @@
 'use client';
 
-import { Link2, FileText, Clock } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import { MemoryData } from '../types/memory.types';
+import PlatformIcon from './PlatformIcon';
 
 function timeAgo(dateInput: string | Date): string {
   const date = new Date(dateInput);
@@ -22,9 +23,8 @@ interface MemoryCardProps {
 
 export default function MemoryCard({ memory }: MemoryCardProps) {
   const isUrl = memory.type === 'url';
-  const Icon = isUrl ? Link2 : FileText;
-  // Show platform name (first tag) for known URLs, otherwise fall back to type
-  const badgeText = isUrl && memory.tags.length > 0 ? memory.tags[0] : memory.type;
+  const platform = isUrl && memory.tags.length > 0 ? memory.tags[0] : null;
+  const badgeText = platform ?? memory.type;
 
   return (
     <div className="glass rounded-2xl p-5 hover:border-border-strong transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/10 group flex flex-col gap-3">
@@ -35,7 +35,7 @@ export default function MemoryCard({ memory }: MemoryCardProps) {
             isUrl ? 'bg-primary/15 text-primary-light' : 'bg-accent/15 text-accent-light'
           }`}
         >
-          <Icon className="w-4 h-4" />
+          <PlatformIcon platform={platform} type={memory.type} className="w-4 h-4" />
         </div>
         <div className="flex-1 min-w-0">
           <h3 className="font-medium text-foreground truncate text-sm group-hover:text-primary-light transition-colors">

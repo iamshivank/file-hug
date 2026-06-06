@@ -46,7 +46,7 @@ const PLATFORM_RULES: PlatformRule[] = [
   },
   {
     hostname: /^(www\.)?(twitter|x)\.com$/,
-    platform: 'twitter',
+    platform: 'X',
     detect(url) {
       if (url.pathname.includes('/status/')) return { subtype: 'tweet', title: 'Tweet' };
       return { subtype: 'profile', title: 'Twitter Profile' };
