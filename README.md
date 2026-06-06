@@ -1,36 +1,170 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# File Hug 🫂
+
+**Never lose something you wanted to remember.**
+
+Your AI-powered memory for everything you discover online. Save reels, articles, ChatGPT conversations, memes, links and ideas in one place. Search them later using natural language.
+
+---
+
+## Sprint 1 — Landing Page
+
+This is the first sprint of File Hug: a beautiful SaaS landing page with waitlist functionality.
+
+### Features
+
+- ✅ Premium dark-themed landing page
+- ✅ Animated hero section with memory cards
+- ✅ Problem / Solution storytelling
+- ✅ Features showcase
+- ✅ How It Works guide
+- ✅ Future Vision section
+- ✅ Waitlist form with validation
+- ✅ MongoDB email storage
+- ✅ REST API with proper error handling
+- ✅ Fully responsive (mobile-first)
+- ✅ Smooth scroll animations
+
+---
+
+## Tech Stack
+
+| Layer       | Technology              |
+| ----------- | ----------------------- |
+| Framework   | Next.js 15 (App Router) |
+| Language    | TypeScript (strict)     |
+| Styling     | TailwindCSS 4           |
+| Icons       | Lucide React            |
+| Database    | MongoDB (Mongoose)      |
+| Deployment  | Vercel-ready            |
+
+---
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 20+
+- MongoDB (local or Atlas)
+
+### Setup
 
 ```bash
+# Clone or navigate to the project
+cd file-hug
+
+# Install dependencies
+npm install
+
+# Configure environment
+# Edit .env.local with your MongoDB URI
+# Default: mongodb://localhost:27017/filehug
+
+# Start development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Environment Variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Create a `.env.local` file in the root (already included):
 
-## Learn More
+```env
+MONGODB_URI=mongodb://localhost:27017/filehug
+```
 
-To learn more about Next.js, take a look at the following resources:
+For MongoDB Atlas:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```env
+MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/filehug?retryWrites=true&w=majority
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## Project Structure
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+src/
+├── app/
+│   ├── layout.tsx          # Root layout with SEO
+│   ├── page.tsx            # Landing page
+│   ├── globals.css         # Design system
+│   └── api/
+│       └── waitlist/
+│           └── route.ts    # POST /api/waitlist
+├── components/
+│   └── landing/
+│       ├── Hero.tsx
+│       ├── Problem.tsx
+│       ├── Solution.tsx
+│       ├── Features.tsx
+│       ├── HowItWorks.tsx
+│       ├── Vision.tsx
+│       ├── Waitlist.tsx
+│       └── Footer.tsx
+├── lib/
+│   └── mongodb.ts          # Database connection
+├── models/
+│   └── Waitlist.ts         # Mongoose model
+├── repositories/
+│   └── waitlist.repository.ts
+├── services/
+│   └── waitlist.service.ts
+├── types/
+│   └── waitlist.types.ts
+└── utils/
+    └── cn.ts               # Classname utility
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## API Reference
+
+### `POST /api/waitlist`
+
+Add a user to the waitlist.
+
+**Request:**
+
+```json
+{
+  "name": "Jane Doe",
+  "email": "jane@example.com"
+}
+```
+
+**Success Response (201):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Successfully joined the waitlist!"
+  }
+}
+```
+
+**Error Response (400):**
+
+```json
+{
+  "success": false,
+  "error": "This email is already on the waitlist."
+}
+```
+
+---
+
+## Deployment
+
+This project is Vercel-ready. Connect your repository to Vercel and add `MONGODB_URI` as an environment variable.
+
+```bash
+npm run build
+```
+
+---
+
+## License
+
+Private — All rights reserved.
