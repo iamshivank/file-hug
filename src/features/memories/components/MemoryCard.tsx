@@ -23,6 +23,8 @@ interface MemoryCardProps {
 export default function MemoryCard({ memory }: MemoryCardProps) {
   const isUrl = memory.type === 'url';
   const Icon = isUrl ? Link2 : FileText;
+  // Show platform name (first tag) for known URLs, otherwise fall back to type
+  const badgeText = isUrl && memory.tags.length > 0 ? memory.tags[0] : memory.type;
 
   return (
     <div className="glass rounded-2xl p-5 hover:border-border-strong transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/10 group flex flex-col gap-3">
@@ -46,7 +48,7 @@ export default function MemoryCard({ memory }: MemoryCardProps) {
                 : 'bg-accent/10 text-accent-light'
             }`}
           >
-            {memory.type}
+            {badgeText}
           </span>
         </div>
       </div>
@@ -56,10 +58,10 @@ export default function MemoryCard({ memory }: MemoryCardProps) {
         {memory.content}
       </p>
 
-      {/* Tags */}
+      {/* Tags — skip the first two (platform + subtype already shown as badge) for URL memories */}
       {memory.tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
-          {memory.tags.slice(0, 3).map((tag) => (
+          {(isUrl ? memory.tags.slice(2) : memory.tags).slice(0, 3).map((tag) => (
             <span
               key={tag}
               className="text-xs px-2 py-0.5 bg-surface rounded-full text-muted"

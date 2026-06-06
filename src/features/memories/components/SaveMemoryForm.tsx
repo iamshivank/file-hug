@@ -3,27 +3,30 @@
 import { useState, FormEvent } from 'react';
 import { ArrowRight, Loader2, Link2, FileText } from 'lucide-react';
 import { SaveMemoryInput } from '../types/memory.types';
+import { detectContent } from '../utils/urlDetection';
 
 interface SaveMemoryFormProps {
   onSave: (input: SaveMemoryInput) => Promise<boolean>;
   isSaving: boolean;
 }
 
-function detectTypeLabel(content: string): { label: string; isUrl: boolean } | null {
+function formatDetectionLabel(content: string): { label: string; isUrl: boolean } | null {
   if (!content.trim()) return null;
-  try {
-    new URL(content.trim());
-    return { label: 'URL detected', isUrl: true };
-  } catch {
-    return { label: 'Note', isUrl: false };
+  const { type, platform, subtype } = detectContent(content);
+  if (type === 'note') return { label: 'Note', isUrl: false };
+  if (platform && subtype) {
+    const p = platform.charAt(0).toUpperCase() + platform.slice(1);
+    const s = subtype.charAt(0).toUpperCase() + subtype.slice(1);
+    return { label: `${p} ${s} detected`, isUrl: true };
   }
+  return { label: 'URL detected', isUrl: true };
 }
 
 export default function SaveMemoryForm({ onSave, isSaving }: SaveMemoryFormProps) {
   const [content, setContent] = useState('');
   const [justSaved, setJustSaved] = useState(false);
 
-  const detected = detectTypeLabel(content);
+  const detected = formatDetectionLabel(content);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();

@@ -1,27 +1,6 @@
 import { memoryRepository } from '@/features/memories/repositories/MemoryRepository';
 import { SaveMemoryInput, SaveResult, FetchResult } from '@/features/memories/types/memory.types';
-
-function detectType(content: string): 'url' | 'note' {
-  try {
-    new URL(content.trim());
-    return 'url';
-  } catch {
-    return 'note';
-  }
-}
-
-function generateTitle(content: string, type: 'url' | 'note'): string {
-  if (type === 'url') {
-    try {
-      const url = new URL(content.trim());
-      return url.hostname.replace('www.', '');
-    } catch {
-      return 'Saved URL';
-    }
-  }
-  const trimmed = content.trim();
-  return trimmed.length > 60 ? trimmed.slice(0, 60) + '...' : trimmed;
-}
+import { detectContent } from '@/features/memories/utils/urlDetection';
 
 export class MemoryService {
   async save(input: SaveMemoryInput): Promise<SaveResult> {
@@ -35,10 +14,9 @@ export class MemoryService {
       return { success: false, error: 'Content must be under 5000 characters.' };
     }
 
-    const type = detectType(content);
-    const title = generateTitle(content, type);
+    const { type, title, tags } = detectContent(content);
 
-    const memory = await memoryRepository.create({ content, type, title, tags: [] });
+    const memory = await memoryRepository.create({ content, type, title, tags });
     return { success: true, data: { memory: memory.toObject() } };
   }
 
