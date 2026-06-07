@@ -76,30 +76,29 @@ export default function Waitlist() {
   };
 
   return (
-    <section ref={sectionRef} id="waitlist" className="relative section-padding">
-      {/* Glow effects */}
-      <div className="glow-orb w-150 h-150 bg-primary top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-15" />
+    <section ref={sectionRef} id="waitlist" className="relative section-padding bg-dots">
+      <div className="glow-orb w-125 h-125 bg-primary top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
 
-      <div className="relative z-10 max-w-xl mx-auto">
+      <div className="relative z-10 max-w-md mx-auto">
         {/* Heading */}
         <div
-          className={`text-center mb-10 transition-all duration-700 ${
+          className={`text-center mb-9 transition-all duration-700 ${
             isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
           }`}
         >
-          <p className="text-primary-light text-sm font-semibold uppercase tracking-widest mb-4">
-            Early Access
+          <p className="text-primary-light text-xs font-semibold uppercase tracking-[0.2em] mb-4">
+            Early access
           </p>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
+          <h2 className="font-display text-3xl sm:text-4xl md:text-5xl mb-4">
             Be among the{' '}
-            <span className="gradient-text">first users.</span>
+            <span className="gradient-text italic">first users.</span>
           </h2>
-          <p className="text-muted-light text-lg">
-            Join the waitlist. Get early access when we launch.
+          <p className="text-muted-light">
+            Join the waitlist and get early access the day we launch.
           </p>
 
           {count !== null && count > 0 && (
-            <div className="mt-5 inline-flex items-center gap-2 glass px-4 py-2 rounded-full text-sm">
+            <div className="mt-5 inline-flex items-center gap-2 border border-border px-4 py-2 rounded-full text-sm">
               <Users className="w-4 h-4 text-primary-light" />
               <span className="text-muted-light">
                 Join{' '}
@@ -119,15 +118,15 @@ export default function Waitlist() {
           <div className="gradient-border p-8 rounded-2xl">
             {status === 'success' ? (
               <div className="text-center py-8 animate-fade-in space-y-4">
-                <CheckCircle2 className="w-14 h-14 text-success mx-auto" />
+                <CheckCircle2 className="w-12 h-12 text-success mx-auto" />
 
                 <div>
-                  <p className="text-5xl font-bold gradient-text">#{position}</p>
+                  <p className="font-display text-6xl gradient-text">#{position}</p>
                   <p className="text-muted text-sm mt-1">on the waitlist</p>
                 </div>
 
                 <div>
-                  <h3 className="text-xl font-bold text-foreground">Welcome aboard!</h3>
+                  <h3 className="font-display text-xl text-foreground">Welcome aboard!</h3>
                   <p className="text-muted-light mt-1">{message}</p>
                 </div>
               </div>
@@ -145,7 +144,7 @@ export default function Waitlist() {
                     placeholder="Your name"
                     required
                     maxLength={100}
-                    className="w-full px-4 py-3 rounded-xl bg-background/60 border border-border text-foreground placeholder:text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all"
+                    className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-all"
                   />
                 </div>
 
@@ -160,12 +159,12 @@ export default function Waitlist() {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
                     required
-                    className="w-full px-4 py-3 rounded-xl bg-background/60 border border-border text-foreground placeholder:text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all"
+                    className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-all"
                   />
                 </div>
 
                 {status === 'error' && (
-                  <div className="flex items-center gap-2 text-red-400 text-sm animate-slide-up">
+                  <div className="flex items-center gap-2 text-danger text-sm animate-slide-up">
                     <AlertCircle className="w-4 h-4 shrink-0" />
                     <span>{message}</span>
                   </div>
@@ -174,18 +173,18 @@ export default function Waitlist() {
                 <button
                   type="submit"
                   disabled={status === 'loading'}
-                  className="w-full group relative px-8 py-4 bg-primary hover:bg-primary-dark text-white font-semibold rounded-xl transition-all duration-300 shadow-lg shadow-primary/25 hover:shadow-primary/40 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+                  className="w-full group inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-primary hover:bg-primary-light text-background font-semibold rounded-xl transition-all duration-300 shadow-lg shadow-primary/20 hover:shadow-primary/35 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {status === 'loading' ? (
-                    <span className="flex items-center justify-center gap-2">
+                    <>
                       <Loader2 className="w-5 h-5 animate-spin" />
                       Joining...
-                    </span>
+                    </>
                   ) : (
-                    <span className="flex items-center justify-center gap-2">
-                      Join Waitlist
-                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                    </span>
+                    <>
+                      Join the waitlist
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                    </>
                   )}
                 </button>
 

@@ -9,7 +9,12 @@ export interface MemoryData {
 }
 
 export interface SaveMemoryInput {
+  /** A URL (link mode) or the note body (note mode). */
   content: string;
+  /** Optional user-provided title — used in note mode. */
+  title?: string;
+  /** Explicit mode from the UI. When omitted the service auto-detects. */
+  type?: 'url' | 'note';
 }
 
 export interface SaveResult {

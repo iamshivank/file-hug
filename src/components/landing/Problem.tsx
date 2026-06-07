@@ -22,7 +22,7 @@ const problems: ProblemItem[] = [
   },
   {
     icon: MessageSquareOff,
-    title: 'Buried ChatGPT conversations',
+    title: 'Buried ChatGPT threads',
     description: 'Brilliant AI conversations lost in hundreds of untitled chats.',
   },
   {
@@ -54,62 +54,51 @@ export default function Problem() {
   }, []);
 
   return (
-    <section ref={sectionRef} className="relative section-padding bg-dots">
-      {/* Glow */}
-      <div className="glow-orb w-[400px] h-[400px] bg-red-500/30 top-1/4 right-[-100px]" />
-
-      <div className="relative z-10 max-w-6xl mx-auto">
+    <section ref={sectionRef} className="relative section-padding">
+      <div className="relative z-10 max-w-5xl mx-auto">
         {/* Heading */}
         <div
-          className={`text-center mb-16 transition-all duration-700 ${
+          className={`max-w-2xl mb-14 transition-all duration-700 ${
             isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
           }`}
         >
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-6">
+          <p className="text-danger text-xs font-semibold uppercase tracking-[0.2em] mb-4">
+            The problem
+          </p>
+          <h2 className="font-display text-3xl sm:text-4xl md:text-5xl leading-tight mb-5">
             The internet is your{' '}
-            <span className="gradient-text">second memory.</span>
+            <span className="gradient-text italic">second memory</span> — full of holes.
           </h2>
-          <p className="text-muted-light text-lg max-w-xl mx-auto">
-            But right now, it&apos;s a memory with holes everywhere.
+          <p className="text-muted-light text-lg">
+            You remember <em className="text-foreground not-italic font-medium">seeing</em> it.
+            You just can&apos;t remember <em className="text-danger not-italic font-medium">where</em> you put it.
           </p>
         </div>
 
         {/* Problem cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-16">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-border rounded-2xl overflow-hidden border border-border">
           {problems.map((problem, index) => {
             const Icon = problem.icon;
             return (
               <div
                 key={problem.title}
-                className={`glass rounded-2xl p-6 hover:border-red-500/20 transition-all duration-500 hover:translate-y-[-2px] group ${
+                className={`bg-surface p-7 hover:bg-surface-hover transition-all duration-500 group ${
                   isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
                 }`}
-                style={{ transitionDelay: `${index * 100 + 200}ms` }}
+                style={{ transitionDelay: `${index * 90 + 200}ms` }}
               >
-                <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center mb-4 group-hover:bg-red-500/20 transition-colors">
-                  <Icon className="w-6 h-6 text-red-400" />
+                <div className="flex items-start gap-4">
+                  <div className="w-11 h-11 rounded-xl bg-danger/10 flex items-center justify-center shrink-0 group-hover:bg-danger/15 transition-colors">
+                    <Icon className="w-5 h-5 text-danger" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-lg text-foreground mb-1.5">{problem.title}</h3>
+                    <p className="text-muted text-sm leading-relaxed">{problem.description}</p>
+                  </div>
                 </div>
-                <h3 className="font-semibold text-lg text-foreground mb-2">{problem.title}</h3>
-                <p className="text-muted text-sm leading-relaxed">{problem.description}</p>
               </div>
             );
           })}
-        </div>
-
-        {/* Bottom message */}
-        <div
-          className={`text-center transition-all duration-700 delay-500 ${
-            isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
-          }`}
-        >
-          <div className="glass-strong inline-block rounded-2xl px-8 py-6 max-w-lg">
-            <p className="text-lg text-foreground font-medium mb-2">
-              People remember <span className="text-primary-light">seeing</span> something.
-            </p>
-            <p className="text-muted-light">
-              They don&apos;t remember <span className="text-red-400">where</span> they saved it.
-            </p>
-          </div>
         </div>
       </div>
     </section>

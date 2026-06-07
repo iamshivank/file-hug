@@ -10,25 +10,30 @@ export default function MemoryDashboard() {
   const { memories, isLoading, error, isSaving, save } = useMemories();
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
-      {/* Save */}
-      <section>
-        <p className="text-xs font-semibold text-muted-light uppercase tracking-widest mb-4">
-          Save a Memory
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10 sm:py-14 space-y-10">
+      {/* Intro */}
+      <header>
+        <h1 className="font-display text-3xl sm:text-4xl text-foreground mb-2">
+          Your memory, kept warm.
+        </h1>
+        <p className="text-muted-light">
+          Drop in a link or a note. File Hug files it away so you can find it later.
         </p>
-        <SaveMemoryForm onSave={save} isSaving={isSaving} />
-      </section>
+      </header>
+
+      {/* Save */}
+      <SaveMemoryForm onSave={save} isSaving={isSaving} />
 
       {/* Grid */}
       <section>
         <div className="flex items-center justify-between mb-4">
-          <p className="text-xs font-semibold text-muted-light uppercase tracking-widest">
-            {isLoading ? 'Loading...' : `Your Memories (${memories.length})`}
-          </p>
+          <h2 className="text-xs font-semibold text-muted uppercase tracking-[0.15em]">
+            {isLoading ? 'Loading' : `Saved (${memories.length})`}
+          </h2>
         </div>
 
         {error && (
-          <p className="text-red-400 text-sm mb-6 glass px-4 py-3 rounded-xl">{error}</p>
+          <p className="text-danger text-sm mb-6 card px-4 py-3">{error}</p>
         )}
 
         {isLoading ? (

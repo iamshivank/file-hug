@@ -34,12 +34,22 @@ First working version of the product. Accessible from the "Try the demo app →"
 
 ### App Features
 
-- ✅ Save any URL or note with a single textarea
-- ✅ Auto-detection of content type (URL vs note)
+- ✅ Two save modes — **Link** (paste a URL) or **Note** (title + multi-line body)
+- ✅ Auto-detection of content type when saving a link (URL vs note)
 - ✅ Platform & subtype tag detection (see below)
-- ✅ Memory cards with platform badge, content preview, tags, and relative timestamp
+- ✅ Memory cards with platform icon, badge, content/body preview, tags, and relative timestamp
+- ✅ Notes render with a display-serif title and a 3-line body preview
 - ✅ Demo mode — pre-seeded sample data, no DB writes (`NEXT_PUBLIC_IS_DEMO_MODE=true`)
 - ✅ Production mode — full MongoDB persistence (`NEXT_PUBLIC_IS_DEMO_MODE=false`)
+
+### Notes vs Links
+
+The save box has a `Link / Note` toggle:
+
+| Mode | Input | What gets stored |
+| ---- | ----- | ---------------- |
+| **Link** | A single URL field | `content` = URL, `type` auto-detected, `title` + `tags` auto-generated from the platform |
+| **Note** | A title field + a body textarea | `content` = body, `type` = `note`, `title` = your title (or the first line if left blank), `tags` = `['note']` |
 
 ### Platform Tag Detection
 
@@ -107,12 +117,18 @@ Returns all saved memories sorted by most recent.
 
 #### `POST /api/memories`
 
-Save a new memory. Platform, subtype, and tags are auto-generated server-side.
+Save a new memory. For links, platform/subtype/tags are auto-generated server-side.
 
-**Request:**
+**Request (link):**
 
 ```json
-{ "content": "https://www.instagram.com/reel/ABC/" }
+{ "content": "https://www.instagram.com/reels/ABC/" }
+```
+
+**Request (note):**
+
+```json
+{ "content": "Use 90-minute deep-work blocks.", "title": "Productivity idea", "type": "note" }
 ```
 
 **Success Response (201):**
@@ -143,14 +159,36 @@ Save a new memory. Platform, subtype, and tags are auto-generated server-side.
 
 ## Tech Stack
 
-| Layer       | Technology              |
-| ----------- | ----------------------- |
-| Framework   | Next.js 15 (App Router) |
-| Language    | TypeScript (strict)     |
-| Styling     | TailwindCSS 4           |
-| Icons       | Lucide React            |
-| Database    | MongoDB (Mongoose)      |
-| Deployment  | Vercel-ready            |
+| Layer      | Technology                          |
+| ---------- | ----------------------------------- |
+| Framework  | Next.js 16 (App Router)             |
+| Language   | TypeScript (strict)                 |
+| Styling    | TailwindCSS 4                       |
+| Type       | Inter (body) · Fraunces (display)   |
+| Icons      | Lucide React + custom platform SVGs |
+| Database   | MongoDB (Mongoose)                  |
+| Deployment | Vercel-ready                        |
+
+---
+
+## Design — "Ink & Amber"
+
+A warm, editorial dark theme that deliberately avoids the generic violet-gradient SaaS look.
+
+| Token        | Value      | Use                       |
+| ------------ | ---------- | ------------------------- |
+| `background` | `#0c0a09`  | Warm near-black           |
+| `foreground` | `#ede8e0`  | Cream text                |
+| `primary`    | `#f5a623`  | Amber — the single accent |
+| `accent`     | `#e8845a`  | Ember (used sparingly)    |
+| `danger`     | `#d97056`  | Clay (pain-point states)  |
+
+- One accent color, no rainbow gradients.
+- Display headlines use the **Fraunces** soft serif; body uses **Inter**.
+- Flat warm cards with hairline borders instead of stacked glassmorphism.
+- Platform memory cards use hand-drawn brand SVGs (`PlatformIcon`).
+
+All tokens live in [src/app/globals.css](src/app/globals.css).
 
 ---
 

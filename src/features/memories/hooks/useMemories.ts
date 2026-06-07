@@ -3,28 +3,37 @@
 import { useState, useEffect, useCallback } from 'react';
 import { MemoryData, SaveMemoryInput, FetchResult, SaveResult } from '../types/memory.types';
 import { DEMO_MEMORIES } from '../data/demoMemories';
+import { detectContent } from '../utils/urlDetection';
 
 const IS_DEMO = process.env.NEXT_PUBLIC_IS_DEMO_MODE === 'true';
 
-function detectTypeLocally(content: string): 'url' | 'note' {
-  try {
-    new URL(content.trim());
-    return 'url';
-  } catch {
-    return 'note';
-  }
-}
+function buildLocalMemory(input: SaveMemoryInput): MemoryData {
+  const content = input.content.trim();
 
-function generateTitleLocally(content: string, type: 'url' | 'note'): string {
-  if (type === 'url') {
-    try {
-      return new URL(content.trim()).hostname.replace('www.', '');
-    } catch {
-      return 'Saved URL';
-    }
+  if (input.type === 'note') {
+    const firstLine = content.split('\n')[0].trim();
+    const title =
+      input.title?.trim() ||
+      (firstLine.length > 80 ? firstLine.slice(0, 80) + '...' : firstLine || 'Untitled note');
+    return {
+      _id: `demo-${Date.now()}`,
+      content,
+      type: 'note',
+      title,
+      tags: ['note'],
+      createdAt: new Date().toISOString(),
+    };
   }
-  const trimmed = content.trim();
-  return trimmed.length > 60 ? trimmed.slice(0, 60) + '...' : trimmed;
+
+  const { type, title, tags } = detectContent(content);
+  return {
+    _id: `demo-${Date.now()}`,
+    content,
+    type,
+    title,
+    tags,
+    createdAt: new Date().toISOString(),
+  };
 }
 
 export function useMemories() {
@@ -68,15 +77,7 @@ export function useMemories() {
     setError(null);
 
     if (IS_DEMO) {
-      const type = detectTypeLocally(input.content);
-      const newMemory: MemoryData = {
-        _id: `demo-${Date.now()}`,
-        content: input.content.trim(),
-        type,
-        title: generateTitleLocally(input.content.trim(), type),
-        tags: [],
-        createdAt: new Date().toISOString(),
-      };
+      const newMemory = buildLocalMemory(input);
       setMemories((prev) => [newMemory, ...prev]);
       setIsSaving(false);
       return true;

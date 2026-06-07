@@ -1,11 +1,21 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, Fraunces } from 'next/font/google';
 import './globals.css';
 
 const inter = Inter({
-  variable: '--font-geist-sans',
+  variable: '--font-inter',
   subsets: ['latin'],
   display: 'swap',
+});
+
+// Warm, soft serif used for display headlines — gives the UI an editorial,
+// hand-designed character instead of the generic sans-only SaaS look.
+const fraunces = Fraunces({
+  variable: '--font-display',
+  subsets: ['latin'],
+  display: 'swap',
+  weight: ['400', '500', '600'],
+  style: ['normal', 'italic'],
 });
 
 export const metadata: Metadata = {
@@ -46,7 +56,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} h-full antialiased`}>
+    <html lang="en" className={`${inter.variable} ${fraunces.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

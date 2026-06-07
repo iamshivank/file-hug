@@ -24,59 +24,53 @@ interface MemoryCardProps {
 export default function MemoryCard({ memory }: MemoryCardProps) {
   const isUrl = memory.type === 'url';
   const platform = isUrl && memory.tags.length > 0 ? memory.tags[0] : null;
-  const badgeText = platform ?? memory.type;
+  const badgeText = platform ?? 'note';
+
+  // For URL cards the first two tags are platform/subtype (shown elsewhere);
+  // for notes, drop the implicit "note" tag from the chip row.
+  const extraTags = (isUrl ? memory.tags.slice(2) : memory.tags.filter((t) => t !== 'note')).slice(0, 3);
 
   return (
-    <div className="glass rounded-2xl p-5 hover:border-border-strong transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/10 group flex flex-col gap-3">
+    <div className="card p-5 hover:border-border-strong hover:bg-surface-hover transition-all duration-300 hover:-translate-y-0.5 group flex flex-col gap-3">
       {/* Header */}
-      <div className="flex items-start gap-3">
-        <div
-          className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-            isUrl ? 'bg-primary/15 text-primary-light' : 'bg-accent/15 text-accent-light'
-          }`}
-        >
-          <PlatformIcon platform={platform} type={memory.type} className="w-4 h-4" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="font-medium text-foreground truncate text-sm group-hover:text-primary-light transition-colors">
-            {memory.title}
-          </h3>
-          <span
-            className={`text-xs px-2 py-0.5 rounded-full mt-1 inline-block font-medium ${
-              isUrl
-                ? 'bg-primary/10 text-primary-light'
-                : 'bg-accent/10 text-accent-light'
-            }`}
-          >
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-primary/10 border border-border flex items-center justify-center shrink-0 text-primary-light">
+            <PlatformIcon platform={platform} type={memory.type} className="w-4 h-4" />
+          </div>
+          <span className="text-[11px] uppercase tracking-wider text-muted font-medium">
             {badgeText}
           </span>
         </div>
+        <div className="flex items-center gap-1 text-muted text-xs shrink-0">
+          <Clock className="w-3 h-3" />
+          <span>{timeAgo(memory.createdAt)}</span>
+        </div>
       </div>
 
+      {/* Title */}
+      <h3 className="font-display text-base text-foreground leading-snug group-hover:text-primary-light transition-colors line-clamp-2">
+        {memory.title}
+      </h3>
+
       {/* Content preview */}
-      <p className="text-muted text-xs leading-relaxed line-clamp-2 flex-1">
+      <p className={`text-muted text-xs leading-relaxed flex-1 ${isUrl ? 'truncate' : 'line-clamp-3'}`}>
         {memory.content}
       </p>
 
-      {/* Tags — skip the first two (platform + subtype already shown as badge) for URL memories */}
-      {memory.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {(isUrl ? memory.tags.slice(2) : memory.tags).slice(0, 3).map((tag) => (
+      {/* Tags */}
+      {extraTags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {extraTags.map((tag) => (
             <span
               key={tag}
-              className="text-xs px-2 py-0.5 bg-surface rounded-full text-muted"
+              className="text-[11px] px-2 py-0.5 bg-background border border-border rounded-full text-muted"
             >
               #{tag}
             </span>
           ))}
         </div>
       )}
-
-      {/* Timestamp */}
-      <div className="flex items-center gap-1 text-muted text-xs">
-        <Clock className="w-3 h-3" />
-        <span>{timeAgo(memory.createdAt)}</span>
-      </div>
     </div>
   );
 }

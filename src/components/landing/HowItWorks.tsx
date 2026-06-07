@@ -8,8 +8,6 @@ interface Step {
   number: string;
   title: string;
   description: string;
-  color: string;
-  bgColor: string;
 }
 
 const steps: Step[] = [
@@ -18,32 +16,24 @@ const steps: Step[] = [
     number: '01',
     title: 'Find something interesting',
     description: 'A reel, article, meme, link, or idea you want to keep.',
-    color: 'text-violet-400',
-    bgColor: 'bg-violet-500/15',
   },
   {
     icon: Download,
     number: '02',
     title: 'Save it to File Hug',
-    description: 'One click. That\'s all it takes.',
-    color: 'text-cyan-400',
-    bgColor: 'bg-cyan-500/15',
+    description: "One click. That's all it takes.",
   },
   {
     icon: MessageSquare,
     number: '03',
-    title: 'Ask in natural language',
-    description: '"Show me startup ideas I saved in April."',
-    color: 'text-emerald-400',
-    bgColor: 'bg-emerald-500/15',
+    title: 'Ask in plain language',
+    description: '"Show me the startup ideas I saved in April."',
   },
   {
     icon: Zap,
     number: '04',
     title: 'Get instant results',
-    description: 'File Hug finds exactly what you\'re looking for.',
-    color: 'text-amber-400',
-    bgColor: 'bg-amber-500/15',
+    description: "File Hug finds exactly what you're looking for.",
   },
 ];
 
@@ -69,9 +59,7 @@ export default function HowItWorks() {
   }, []);
 
   return (
-    <section ref={sectionRef} id="how-it-works" className="relative section-padding">
-      <div className="glow-orb w-[500px] h-[500px] bg-primary bottom-0 left-[-200px] opacity-20" />
-
+    <section ref={sectionRef} id="how-it-works" className="relative section-padding bg-grid">
       <div className="relative z-10 max-w-5xl mx-auto">
         {/* Heading */}
         <div
@@ -79,21 +67,20 @@ export default function HowItWorks() {
             isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
           }`}
         >
-          <p className="text-primary-light text-sm font-semibold uppercase tracking-widest mb-4">
-            How It Works
+          <p className="text-primary-light text-xs font-semibold uppercase tracking-[0.2em] mb-4">
+            How it works
           </p>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold">
-            Simple as{' '}
-            <span className="gradient-text">1-2-3-4.</span>
+          <h2 className="font-display text-3xl sm:text-4xl md:text-5xl">
+            Simple as <span className="gradient-text italic">1&ndash;2&ndash;3&ndash;4.</span>
           </h2>
         </div>
 
         {/* Steps */}
         <div className="relative">
           {/* Connecting line - desktop only */}
-          <div className="hidden lg:block absolute top-1/2 left-[10%] right-[10%] h-px bg-gradient-to-r from-violet-500/30 via-cyan-500/30 via-emerald-500/30 to-amber-500/30 -translate-y-1/2" />
+          <div className="hidden lg:block absolute top-7 left-[12%] right-[12%] h-px bg-border -translate-y-1/2" />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10">
             {steps.map((step, index) => {
               const Icon = step.icon;
               return (
@@ -102,21 +89,19 @@ export default function HowItWorks() {
                   className={`relative text-center transition-all duration-700 ${
                     isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
                   }`}
-                  style={{ transitionDelay: `${index * 150 + 200}ms` }}
+                  style={{ transitionDelay: `${index * 130 + 200}ms` }}
                 >
-                  {/* Step number */}
-                  <div className="text-6xl font-black text-primary/10 mb-4 font-mono">
-                    {step.number}
+                  {/* Icon + number badge */}
+                  <div className="relative w-14 h-14 mx-auto mb-5">
+                    <div className="w-14 h-14 rounded-2xl bg-surface border border-border flex items-center justify-center">
+                      <Icon className="w-6 h-6 text-primary-light" />
+                    </div>
+                    <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-primary text-background text-xs font-bold flex items-center justify-center font-mono">
+                      {index + 1}
+                    </span>
                   </div>
 
-                  {/* Icon */}
-                  <div
-                    className={`w-16 h-16 rounded-2xl ${step.bgColor} flex items-center justify-center mx-auto mb-5 hover:scale-110 transition-transform duration-300`}
-                  >
-                    <Icon className={`w-7 h-7 ${step.color}`} />
-                  </div>
-
-                  <h3 className="text-lg font-bold text-foreground mb-2">{step.title}</h3>
+                  <h3 className="font-medium text-foreground mb-2">{step.title}</h3>
                   <p className="text-muted text-sm leading-relaxed">{step.description}</p>
                 </div>
               );

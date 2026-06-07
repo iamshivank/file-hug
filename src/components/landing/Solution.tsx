@@ -6,19 +6,20 @@ import { Save, Search, Brain } from 'lucide-react';
 interface TimelineItem {
   month: string;
   label: string;
-  color: string;
+  dot: string;
+  ring: string;
 }
 
 const timeline: TimelineItem[] = [
-  { month: 'March', label: 'Germany university reel', color: 'bg-violet-500' },
-  { month: 'April', label: 'Startup article', color: 'bg-cyan-500' },
-  { month: 'May', label: 'AI project idea', color: 'bg-emerald-500' },
+  { month: 'March', label: 'Germany university reel', dot: 'bg-primary', ring: 'bg-primary/15' },
+  { month: 'April', label: 'Startup article', dot: 'bg-accent', ring: 'bg-accent/15' },
+  { month: 'May', label: 'AI project idea', dot: 'bg-success', ring: 'bg-success/15' },
 ];
 
 const pillars = [
-  { icon: Save, title: 'Save anything.', description: 'Links, reels, notes, memes — everything goes in.' },
-  { icon: Search, title: 'Find everything.', description: 'Natural language search that actually works.' },
-  { icon: Brain, title: 'Remember effortlessly.', description: 'AI organizes so you never have to.' },
+  { icon: Save, title: 'Save anything', description: 'Links, reels, notes, memes — everything goes in one place.' },
+  { icon: Search, title: 'Find everything', description: 'Natural-language search that actually understands you.' },
+  { icon: Brain, title: 'Remember effortlessly', description: 'It organizes quietly in the background, so you never have to.' },
 ];
 
 export default function Solution() {
@@ -43,25 +44,26 @@ export default function Solution() {
   }, []);
 
   return (
-    <section ref={sectionRef} className="relative section-padding">
-      {/* Glow */}
-      <div className="glow-orb w-[500px] h-[500px] bg-primary top-1/3 left-[-150px]" />
-      <div className="glow-orb w-[300px] h-[300px] bg-accent bottom-1/4 right-[-100px]" />
+    <section ref={sectionRef} className="relative section-padding bg-dots">
+      <div className="glow-orb w-100 h-100 bg-primary top-1/3 -left-32" />
 
-      <div className="relative z-10 max-w-6xl mx-auto">
+      <div className="relative z-10 max-w-5xl mx-auto">
         {/* Heading */}
         <div
           className={`text-center mb-16 transition-all duration-700 ${
             isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
           }`}
         >
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
-            Meet <span className="gradient-text">File Hug.</span>
+          <p className="text-primary-light text-xs font-semibold uppercase tracking-[0.2em] mb-4">
+            The fix
+          </p>
+          <h2 className="font-display text-3xl sm:text-4xl md:text-5xl">
+            Meet <span className="gradient-text italic">File Hug.</span>
           </h2>
         </div>
 
         {/* Pillars */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-20">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-10 mb-20">
           {pillars.map((pillar, index) => {
             const Icon = pillar.icon;
             return (
@@ -72,11 +74,11 @@ export default function Solution() {
                 }`}
                 style={{ transitionDelay: `${index * 150 + 200}ms` }}
               >
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center mx-auto mb-5 hover:scale-110 transition-transform duration-300">
-                  <Icon className="w-7 h-7 text-primary-light" />
+                <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-border flex items-center justify-center mx-auto mb-5">
+                  <Icon className="w-6 h-6 text-primary-light" />
                 </div>
-                <h3 className="text-xl font-bold text-foreground mb-2">{pillar.title}</h3>
-                <p className="text-muted-light text-sm">{pillar.description}</p>
+                <h3 className="font-display text-xl text-foreground mb-2">{pillar.title}</h3>
+                <p className="text-muted-light text-sm leading-relaxed">{pillar.description}</p>
               </div>
             );
           })}
@@ -88,30 +90,30 @@ export default function Solution() {
             isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
           }`}
         >
-          <h3 className="text-center text-xl font-semibold text-muted-light mb-10">
-            Your memories, organized by time
+          <h3 className="text-center text-sm font-medium text-muted uppercase tracking-[0.15em] mb-10">
+            Your memories, kept by time
           </h3>
           <div className="relative max-w-md mx-auto">
             {/* Vertical line */}
-            <div className="absolute left-6 top-0 bottom-0 w-px bg-gradient-to-b from-primary/50 via-accent/50 to-success/50" />
+            <div className="absolute left-6 top-2 bottom-2 w-px bg-border" />
 
             {timeline.map((item, index) => (
               <div
                 key={item.month}
-                className={`relative flex items-center gap-6 mb-8 last:mb-0 transition-all duration-500 ${
+                className={`relative flex items-center gap-6 mb-6 last:mb-0 transition-all duration-500 ${
                   isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'
                 }`}
                 style={{ transitionDelay: `${index * 200 + 700}ms` }}
               >
                 {/* Dot */}
-                <div className={`relative z-10 w-12 h-12 rounded-full ${item.color}/20 flex items-center justify-center shrink-0`}>
-                  <div className={`w-3 h-3 rounded-full ${item.color}`} />
+                <div className={`relative z-10 w-12 h-12 rounded-full ${item.ring} flex items-center justify-center shrink-0`}>
+                  <div className={`w-2.5 h-2.5 rounded-full ${item.dot}`} />
                 </div>
 
                 {/* Content */}
-                <div className="glass rounded-xl px-5 py-3 flex-1 hover:border-border-strong transition-colors">
-                  <p className="text-xs text-muted uppercase tracking-wider font-medium">{item.month}</p>
-                  <p className="text-foreground font-medium mt-1">{item.label}</p>
+                <div className="card px-5 py-3 flex-1 hover:border-border-strong transition-colors">
+                  <p className="text-xs text-muted uppercase tracking-wider">{item.month}</p>
+                  <p className="text-foreground font-medium mt-0.5">{item.label}</p>
                 </div>
               </div>
             ))}
