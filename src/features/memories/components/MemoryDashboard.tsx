@@ -1,40 +1,76 @@
 'use client';
 
+import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useMemories } from '../hooks/useMemories';
 import SaveMemoryForm from './SaveMemoryForm';
 import MemoryCard from './MemoryCard';
 import EmptyState from './EmptyState';
 
+type Filter = 'all' | 'links' | 'notes';
+
 export default function MemoryDashboard() {
   const { memories, isLoading, error, isSaving, save } = useMemories();
+  const [filter, setFilter] = useState<Filter>('all');
+
+  const links = memories.filter((m) => m.type === 'url');
+  const notes = memories.filter((m) => m.type === 'note');
+  const filtered = filter === 'links' ? links : filter === 'notes' ? notes : memories;
+
+  const filterTabs: { key: Filter; label: string; count: number }[] = [
+    { key: 'all', label: 'All', count: memories.length },
+    { key: 'links', label: 'Links', count: links.length },
+    { key: 'notes', label: 'Notes', count: notes.length },
+  ];
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10 sm:py-14 space-y-10">
-      {/* Intro */}
-      <header>
-        <h1 className="font-display text-3xl sm:text-4xl text-foreground mb-2">
-          Your memory, kept warm.
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
+      {/* Hero intro */}
+      <header className="text-center max-w-2xl mx-auto mb-9">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border text-xs text-muted-light mb-5">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+          Your personal memory vault
+        </div>
+        <h1 className="font-display text-4xl sm:text-5xl text-foreground leading-[1.1] mb-3">
+          Keep everything.{' '}
+          <span className="gradient-text italic">Find it later.</span>
         </h1>
-        <p className="text-muted-light">
-          Drop in a link or a note. File Hug files it away so you can find it later.
+        <p className="text-muted-light text-lg">
+          Drop in a link or a note — File Hug remembers, so you don&apos;t have to.
         </p>
       </header>
 
-      {/* Save */}
-      <SaveMemoryForm onSave={save} isSaving={isSaving} />
+      {/* Composer — the centerpiece */}
+      <div className="max-w-2xl mx-auto mb-20">
+        <SaveMemoryForm onSave={save} isSaving={isSaving} />
+      </div>
 
-      {/* Grid */}
+      {/* Library */}
       <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xs font-semibold text-muted uppercase tracking-[0.15em]">
-            {isLoading ? 'Loading' : `Saved (${memories.length})`}
-          </h2>
+        <div className="flex items-center justify-between gap-4 mb-5 flex-wrap">
+          <h2 className="font-display text-2xl text-foreground">Library</h2>
+
+          {memories.length > 0 && (
+            <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-surface border border-border">
+              {filterTabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setFilter(tab.key)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+                    filter === tab.key
+                      ? 'bg-primary/15 text-primary-light'
+                      : 'text-muted hover:text-foreground'
+                  }`}
+                >
+                  {tab.label}
+                  <span className="text-xs text-muted tabular-nums">{tab.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        {error && (
-          <p className="text-danger text-sm mb-6 card px-4 py-3">{error}</p>
-        )}
+        {error && <p className="text-danger text-sm mb-6 card px-4 py-3">{error}</p>}
 
         {isLoading ? (
           <div className="flex items-center justify-center py-24">
@@ -42,9 +78,13 @@ export default function MemoryDashboard() {
           </div>
         ) : memories.length === 0 ? (
           <EmptyState />
+        ) : filtered.length === 0 ? (
+          <p className="text-muted text-sm text-center py-16 card">
+            No {filter} saved yet.
+          </p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {memories.map((memory) => (
+            {filtered.map((memory) => (
               <MemoryCard key={memory._id} memory={memory} />
             ))}
           </div>

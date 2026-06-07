@@ -1,29 +1,29 @@
 @import "tailwindcss";
 
-/* ===== Design Tokens — "Ink & Amber" ===== */
+/* ===== Design Tokens — "Ember" (warm dark + vibrant orange) ===== */
 :root {
   --background: #0c0a09;        /* warm near-black */
   --background-elev: #14100d;   /* slightly raised */
   --foreground: #ede8e0;        /* cream */
   --surface: #16120e;           /* warm card */
   --surface-hover: #1f1812;     /* warm card hover */
-  --border: rgba(245, 166, 35, 0.12);
-  --border-strong: rgba(245, 166, 35, 0.30);
-  --primary: #f5a623;           /* amber */
-  --primary-light: #f9c45e;     /* gold */
-  --primary-dark: #d4861a;      /* deep amber */
-  --accent: #e8845a;            /* ember / warm coral (used sparingly) */
-  --accent-light: #f0a079;
+  --border: rgba(251, 139, 61, 0.14);
+  --border-strong: rgba(251, 139, 61, 0.32);
+  --primary: #fb8b3d;           /* vibrant orange */
+  --primary-light: #ffb05c;     /* light orange */
+  --primary-dark: #e06f22;      /* deep orange */
+  --accent: #f4734a;            /* ember / coral */
+  --accent-light: #f89372;
   --success: #8bb066;           /* warm muted green */
-  --danger: #d97056;            /* clay (for "pain" states) */
+  --danger: #d9594a;            /* clay-red (for "pain" states) */
   --muted: #8a7f72;             /* warm grey */
   --muted-light: #b7ab9a;       /* warm light grey */
   --card-bg: #14100d;
-  --card-border: rgba(245, 166, 35, 0.10);
-  --glow-amber: rgba(245, 166, 35, 0.22);
-  --gradient-start: #f9c45e;
-  --gradient-mid: #f5a623;
-  --gradient-end: #e8845a;
+  --card-border: rgba(251, 139, 61, 0.10);
+  --glow-amber: rgba(251, 139, 61, 0.22);
+  --gradient-start: #ffb05c;
+  --gradient-mid: #fb8b3d;
+  --gradient-end: #f4734a;
 }
 
 @theme inline {
@@ -86,11 +86,10 @@
 }
 
 /* ===== Base Styles ===== */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+/* NOTE: do not add an unlayered `* { margin:0; padding:0 }` reset here.
+   Tailwind v4 preflight already resets these inside `@layer base`, and any
+   unlayered rule overrides every layered utility (px-*, mx-auto, gap, …),
+   which silently breaks all spacing/alignment across the app. */
 
 html {
   scroll-behavior: smooth;
@@ -113,7 +112,7 @@ body {
 }
 
 ::selection {
-  background: rgba(245, 166, 35, 0.28);
+  background: rgba(251, 139, 61, 0.28);
   color: #fff7ea;
 }
 
@@ -127,12 +126,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(245, 166, 35, 0.22);
+  background: rgba(251, 139, 61, 0.22);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(245, 166, 35, 0.4);
+  background: rgba(251, 139, 61, 0.4);
 }
 
 /* ===== Surfaces (warm, minimal — no glass-on-glass) ===== */
@@ -188,13 +187,13 @@ body {
 /* Subtle warm paper-grain / ruled patterns */
 .bg-grid {
   background-image:
-    linear-gradient(rgba(245, 166, 35, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(245, 166, 35, 0.035) 1px, transparent 1px);
+    linear-gradient(rgba(251, 139, 61, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(251, 139, 61, 0.035) 1px, transparent 1px);
   background-size: 72px 72px;
 }
 
 .bg-dots {
-  background-image: radial-gradient(rgba(245, 166, 35, 0.07) 1px, transparent 1px);
+  background-image: radial-gradient(rgba(251, 139, 61, 0.07) 1px, transparent 1px);
   background-size: 28px 28px;
 }
 
@@ -204,6 +203,65 @@ body {
   filter: blur(90px);
   pointer-events: none;
   opacity: 0.25;
+}
+
+/* ===== Composer (the central save toolbar) ===== */
+.composer {
+  position: relative;
+  border-radius: 26px;
+  background: rgba(20, 16, 13, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border-strong);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.composer:focus-within {
+  border-color: var(--primary);
+  box-shadow:
+    0 0 0 1px rgba(251, 139, 61, 0.25),
+    0 12px 50px -14px rgba(251, 139, 61, 0.45);
+}
+
+/* Big, soft, colorful warm glow behind/below the composer (Gemini-style) */
+.composer-aura {
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 56%;
+  width: 116%;
+  height: 200%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  background:
+    radial-gradient(38% 42% at 36% 48%, rgba(244, 114, 60, 0.36), transparent 72%),
+    radial-gradient(34% 40% at 66% 44%, rgba(251, 139, 61, 0.34), transparent 72%),
+    radial-gradient(32% 40% at 52% 66%, rgba(236, 72, 110, 0.20), transparent 70%);
+  filter: blur(50px) saturate(1.15);
+  opacity: 0.8;
+  animation: aura-breathe 8s ease-in-out infinite;
+}
+
+@keyframes aura-breathe {
+  0%, 100% { opacity: 0.65; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 0.92; transform: translate(-50%, -50%) scale(1.05); }
+}
+
+/* Keyboard hint chip */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4rem;
+  height: 1.4rem;
+  padding: 0 0.35rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.7rem;
+  line-height: 1;
+  color: var(--muted-light);
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 6px;
 }
 
 .section-padding {
