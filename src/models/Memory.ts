@@ -5,6 +5,7 @@ export interface IMemory extends Document {
   type: 'url' | 'note';
   title: string;
   tags: string[];
+  linkedMemoryIds: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -15,6 +16,7 @@ const memorySchema = new mongoose.Schema<IMemory>(
     type: { type: String, enum: ['url', 'note'], required: true },
     title: { type: String, required: true, maxlength: 200 },
     tags: [{ type: String, maxlength: 50 }],
+    linkedMemoryIds: { type: [String], default: [] },
   },
   { timestamps: true }
 );

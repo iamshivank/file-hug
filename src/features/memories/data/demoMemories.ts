@@ -32,6 +32,7 @@ export const DEMO_MEMORIES: MemoryData[] = [
     type: 'note',
     title: 'Linear design system inspiration...',
     tags: ['design', 'inspiration'],
+    linkedMemoryIds: ['demo-3'],
     createdAt: '2026-06-05T09:15:00.000Z',
   },
   {

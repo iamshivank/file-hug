@@ -3,19 +3,28 @@
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useMemories } from '../hooks/useMemories';
+import { MemoryData } from '../types/memory.types';
 import SaveMemoryForm from './SaveMemoryForm';
 import MemoryCard from './MemoryCard';
 import EmptyState from './EmptyState';
+import LinkPreview from './LinkPreview';
 
 type Filter = 'all' | 'links' | 'notes';
 
 export default function MemoryDashboard() {
   const { memories, isLoading, error, isSaving, save } = useMemories();
   const [filter, setFilter] = useState<Filter>('all');
+  const [preview, setPreview] = useState<MemoryData | null>(null);
 
   const links = memories.filter((m) => m.type === 'url');
   const notes = memories.filter((m) => m.type === 'note');
   const filtered = filter === 'links' ? links : filter === 'notes' ? notes : memories;
+
+  const linksById = new Map(links.map((l) => [l._id, l]));
+  const connectedLinksFor = (memory: MemoryData): MemoryData[] =>
+    (memory.linkedMemoryIds ?? [])
+      .map((id) => linksById.get(id))
+      .filter((l): l is MemoryData => !!l);
 
   const filterTabs: { key: Filter; label: string; count: number }[] = [
     { key: 'all', label: 'All', count: memories.length },
@@ -42,7 +51,7 @@ export default function MemoryDashboard() {
 
       {/* Composer — the centerpiece */}
       <div className="max-w-2xl mx-auto mb-20">
-        <SaveMemoryForm onSave={save} isSaving={isSaving} />
+        <SaveMemoryForm onSave={save} isSaving={isSaving} savedLinks={links} />
       </div>
 
       {/* Library */}
@@ -85,11 +94,19 @@ export default function MemoryDashboard() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map((memory) => (
-              <MemoryCard key={memory._id} memory={memory} />
+              <MemoryCard
+                key={memory._id}
+                memory={memory}
+                onOpen={memory.type === 'url' ? () => setPreview(memory) : undefined}
+                connectedLinks={memory.type === 'note' ? connectedLinksFor(memory) : undefined}
+                onOpenConnected={setPreview}
+              />
             ))}
           </div>
         )}
       </section>
+
+      {preview && <LinkPreview memory={preview} onClose={() => setPreview(null)} />}
     </div>
   );
 }

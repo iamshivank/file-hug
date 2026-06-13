@@ -19,9 +19,20 @@ function timeAgo(dateInput: string | Date): string {
 
 interface MemoryCardProps {
   memory: MemoryData;
+  /** Opens the PiP preview — only passed for URL cards. */
+  onOpen?: () => void;
+  /** Resolved link memories this note is connected to. */
+  connectedLinks?: MemoryData[];
+  /** Opens the PiP preview for a connected link. */
+  onOpenConnected?: (link: MemoryData) => void;
 }
 
-export default function MemoryCard({ memory }: MemoryCardProps) {
+export default function MemoryCard({
+  memory,
+  onOpen,
+  connectedLinks = [],
+  onOpenConnected,
+}: MemoryCardProps) {
   const isUrl = memory.type === 'url';
   const platform = isUrl && memory.tags.length > 0 ? memory.tags[0] : null;
   const badgeText = platform ?? 'note';
@@ -31,7 +42,24 @@ export default function MemoryCard({ memory }: MemoryCardProps) {
   const extraTags = (isUrl ? memory.tags.slice(2) : memory.tags.filter((t) => t !== 'note')).slice(0, 3);
 
   return (
-    <div className="card p-5 hover:border-border-strong hover:bg-surface-hover transition-all duration-300 hover:-translate-y-0.5 group flex flex-col gap-3">
+    <div
+      role={onOpen ? 'button' : undefined}
+      tabIndex={onOpen ? 0 : undefined}
+      onClick={onOpen}
+      onKeyDown={
+        onOpen
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onOpen();
+              }
+            }
+          : undefined
+      }
+      className={`card p-5 hover:border-border-strong hover:bg-surface-hover transition-all duration-300 hover:-translate-y-0.5 group flex flex-col gap-3 ${
+        onOpen ? 'cursor-pointer' : ''
+      }`}
+    >
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -57,6 +85,30 @@ export default function MemoryCard({ memory }: MemoryCardProps) {
       <p className={`text-muted text-xs leading-relaxed flex-1 ${isUrl ? 'truncate' : 'line-clamp-3'}`}>
         {memory.content}
       </p>
+
+      {/* Connected links — saved URLs this note points to */}
+      {connectedLinks.length > 0 && (
+        <div className="flex flex-col gap-1.5 pt-1 border-t border-border">
+          {connectedLinks.map((link) => (
+            <button
+              key={link._id}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenConnected?.(link);
+              }}
+              className="inline-flex items-center gap-2 px-2 py-1.5 -mx-1 rounded-lg text-left text-xs text-primary-light hover:bg-surface-hover transition-colors cursor-pointer min-w-0"
+            >
+              <PlatformIcon
+                platform={link.tags.length > 0 ? link.tags[0] : null}
+                type="url"
+                className="w-3.5 h-3.5 shrink-0"
+              />
+              <span className="truncate">{link.title}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Tags */}
       {extraTags.length > 0 && (

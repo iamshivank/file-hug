@@ -9,14 +9,18 @@ import {
   Check,
   ClipboardPaste,
   Sparkles,
+  X,
+  ChevronDown,
 } from 'lucide-react';
-import { SaveMemoryInput } from '../types/memory.types';
+import { SaveMemoryInput, MemoryData } from '../types/memory.types';
 import { detectContent } from '../utils/urlDetection';
 import PlatformIcon from './PlatformIcon';
 
 interface SaveMemoryFormProps {
   onSave: (input: SaveMemoryInput) => Promise<boolean>;
   isSaving: boolean;
+  /** Already-saved link memories the user can connect a note to. */
+  savedLinks: MemoryData[];
 }
 
 type Mode = 'link' | 'note';
@@ -25,11 +29,13 @@ function titleCase(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export default function SaveMemoryForm({ onSave, isSaving }: SaveMemoryFormProps) {
+export default function SaveMemoryForm({ onSave, isSaving, savedLinks }: SaveMemoryFormProps) {
   const [mode, setMode] = useState<Mode>('link');
   const [url, setUrl] = useState('');
   const [noteTitle, setNoteTitle] = useState('');
   const [noteBody, setNoteBody] = useState('');
+  const [linkedIds, setLinkedIds] = useState<string[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [modKey, setModKey] = useState('Ctrl');
   const urlRef = useRef<HTMLInputElement>(null);
@@ -54,15 +60,26 @@ export default function SaveMemoryForm({ onSave, isSaving }: SaveMemoryFormProps
     const input: SaveMemoryInput =
       mode === 'link'
         ? { content: url.trim() }
-        : { content: noteBody.trim(), title: noteTitle.trim(), type: 'note' };
+        : {
+            content: noteBody.trim(),
+            title: noteTitle.trim(),
+            type: 'note',
+            linkedMemoryIds: linkedIds,
+          };
 
     const success = await onSave(input);
     if (success) {
       setUrl('');
       setNoteTitle('');
       setNoteBody('');
+      setLinkedIds([]);
+      setPickerOpen(false);
       flashSaved();
     }
+  };
+
+  const toggleLinked = (id: string) => {
+    setLinkedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
   const handleSubmit = (e: FormEvent) => {
@@ -92,6 +109,7 @@ export default function SaveMemoryForm({ onSave, isSaving }: SaveMemoryFormProps
 
   const switchMode = (m: Mode) => {
     setMode(m);
+    setPickerOpen(false);
     if (m === 'link') setTimeout(() => urlRef.current?.focus(), 0);
   };
 
@@ -185,8 +203,53 @@ export default function SaveMemoryForm({ onSave, isSaving }: SaveMemoryFormProps
             maxLength={5000}
             className="w-full bg-transparent border-0 outline-none px-3 py-1 text-foreground placeholder:text-muted resize-none leading-relaxed"
           />
+
+          {/* Connected links — chips for what's attached so far */}
+          {linkedIds.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 px-3 pb-1.5">
+              {linkedIds.map((id) => {
+                const link = savedLinks.find((l) => l._id === id);
+                if (!link) return null;
+                return (
+                  <span
+                    key={id}
+                    className="inline-flex items-center gap-1.5 max-w-full pl-2.5 pr-1 py-1 rounded-full bg-primary/10 border border-border text-xs text-primary-light"
+                  >
+                    <PlatformIcon platform={link.tags[0] ?? null} type="url" className="w-3 h-3 shrink-0" />
+                    <span className="truncate max-w-[180px]">{link.title}</span>
+                    <button
+                      type="button"
+                      onClick={() => toggleLinked(id)}
+                      aria-label={`Remove link ${link.title}`}
+                      className="w-4 h-4 rounded-full flex items-center justify-center text-muted hover:text-foreground transition-colors cursor-pointer shrink-0"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
           <div className="flex items-center justify-between gap-3 px-2 pt-1">
-            <span className="text-xs text-muted tabular-nums">{noteBody.length}/5000</span>
+            <div className="flex items-center gap-3 min-w-0">
+              <button
+                type="button"
+                onClick={() => setPickerOpen((o) => !o)}
+                aria-expanded={pickerOpen}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs text-muted hover:text-primary-light hover:bg-surface-hover transition-colors cursor-pointer"
+              >
+                <Link2 className="w-3.5 h-3.5" />
+                Connect a saved link
+                {linkedIds.length > 0 && (
+                  <span className="tabular-nums text-primary-light">({linkedIds.length})</span>
+                )}
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform ${pickerOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+              <span className="text-xs text-muted tabular-nums">{noteBody.length}/5000</span>
+            </div>
             <button
               type="submit"
               disabled={isSaving || !canSave}
@@ -207,6 +270,46 @@ export default function SaveMemoryForm({ onSave, isSaving }: SaveMemoryFormProps
               )}
             </button>
           </div>
+
+          {/* Saved-link picker — connect this note to links already in the library */}
+          {pickerOpen && (
+            <div className="mx-2 mt-2 mb-1 rounded-xl border border-border bg-background/60 max-h-56 overflow-y-auto">
+              {savedLinks.length === 0 ? (
+                <p className="text-xs text-muted px-4 py-5 text-center leading-relaxed">
+                  No saved links yet — save a link first, then you can connect notes to it.
+                </p>
+              ) : (
+                savedLinks.map((link) => {
+                  const selected = linkedIds.includes(link._id);
+                  return (
+                    <button
+                      type="button"
+                      key={link._id}
+                      onClick={() => toggleLinked(link._id)}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-surface-hover transition-colors cursor-pointer"
+                    >
+                      <span className="text-primary-light shrink-0">
+                        <PlatformIcon platform={link.tags[0] ?? null} type="url" className="w-4 h-4" />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm text-foreground truncate">{link.title}</span>
+                        <span className="block text-[11px] text-muted truncate">{link.content}</span>
+                      </span>
+                      <span
+                        className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
+                          selected
+                            ? 'bg-primary border-primary text-background'
+                            : 'border-border text-transparent'
+                        }`}
+                      >
+                        <Check className="w-3 h-3" />
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          )}
         </div>
       )}
 

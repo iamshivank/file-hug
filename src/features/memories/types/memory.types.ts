@@ -4,6 +4,8 @@ export interface MemoryData {
   type: 'url' | 'note';
   title: string;
   tags: string[];
+  /** Ids of saved link memories this note is connected to. */
+  linkedMemoryIds?: string[];
   createdAt: string | Date;
   updatedAt?: string | Date;
 }
@@ -15,6 +17,8 @@ export interface SaveMemoryInput {
   title?: string;
   /** Explicit mode from the UI. When omitted the service auto-detects. */
   type?: 'url' | 'note';
+  /** Saved link memories to connect this note to — note mode only. */
+  linkedMemoryIds?: string[];
 }
 
 export interface SaveResult {

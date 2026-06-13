@@ -21,6 +21,7 @@ function buildLocalMemory(input: SaveMemoryInput): MemoryData {
       type: 'note',
       title,
       tags: ['note'],
+      linkedMemoryIds: input.linkedMemoryIds ?? [],
       createdAt: new Date().toISOString(),
     };
   }
