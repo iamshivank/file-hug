@@ -1,5 +1,5 @@
 export interface MemoryData {
-  _id: string;
+  id: string;
   content: string;
   type: 'url' | 'note';
   title: string;

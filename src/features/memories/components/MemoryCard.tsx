@@ -91,7 +91,7 @@ export default function MemoryCard({
         <div className="flex flex-col gap-1.5 pt-1 border-t border-border">
           {connectedLinks.map((link) => (
             <button
-              key={link._id}
+              key={link.id}
               type="button"
               onClick={(e) => {
                 e.stopPropagation();

@@ -1,5 +1,5 @@
 export interface WaitlistEntry {
-  _id?: string;
+  id?: number;
   name: string;
   email: string;
   createdAt: Date;

@@ -208,7 +208,7 @@ export default function SaveMemoryForm({ onSave, isSaving, savedLinks }: SaveMem
           {linkedIds.length > 0 && (
             <div className="flex flex-wrap gap-1.5 px-3 pb-1.5">
               {linkedIds.map((id) => {
-                const link = savedLinks.find((l) => l._id === id);
+                const link = savedLinks.find((l) => l.id === id);
                 if (!link) return null;
                 return (
                   <span
@@ -280,12 +280,12 @@ export default function SaveMemoryForm({ onSave, isSaving, savedLinks }: SaveMem
                 </p>
               ) : (
                 savedLinks.map((link) => {
-                  const selected = linkedIds.includes(link._id);
+                  const selected = linkedIds.includes(link.id);
                   return (
                     <button
                       type="button"
-                      key={link._id}
-                      onClick={() => toggleLinked(link._id)}
+                      key={link.id}
+                      onClick={() => toggleLinked(link.id)}
                       className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-surface-hover transition-colors cursor-pointer"
                     >
                       <span className="text-primary-light shrink-0">

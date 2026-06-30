@@ -16,7 +16,7 @@ function buildLocalMemory(input: SaveMemoryInput): MemoryData {
       input.title?.trim() ||
       (firstLine.length > 80 ? firstLine.slice(0, 80) + '...' : firstLine || 'Untitled note');
     return {
-      _id: `demo-${Date.now()}`,
+      id: `demo-${Date.now()}`,
       content,
       type: 'note',
       title,
@@ -28,7 +28,7 @@ function buildLocalMemory(input: SaveMemoryInput): MemoryData {
 
   const { type, title, tags } = detectContent(content);
   return {
-    _id: `demo-${Date.now()}`,
+    id: `demo-${Date.now()}`,
     content,
     type,
     title,

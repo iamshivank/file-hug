@@ -20,7 +20,7 @@ export default function MemoryDashboard() {
   const notes = memories.filter((m) => m.type === 'note');
   const filtered = filter === 'links' ? links : filter === 'notes' ? notes : memories;
 
-  const linksById = new Map(links.map((l) => [l._id, l]));
+  const linksById = new Map(links.map((l) => [l.id, l]));
   const connectedLinksFor = (memory: MemoryData): MemoryData[] =>
     (memory.linkedMemoryIds ?? [])
       .map((id) => linksById.get(id))
@@ -95,7 +95,7 @@ export default function MemoryDashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map((memory) => (
               <MemoryCard
-                key={memory._id}
+                key={memory.id}
                 memory={memory}
                 onOpen={memory.type === 'url' ? () => setPreview(memory) : undefined}
                 connectedLinks={memory.type === 'note' ? connectedLinksFor(memory) : undefined}

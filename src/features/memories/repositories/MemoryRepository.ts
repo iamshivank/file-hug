@@ -1,5 +1,7 @@
-import { connectToDatabase } from '@/lib/mongodb';
-import Memory, { IMemory } from '@/models/Memory';
+import { db } from '@/lib/db';
+import { memories } from '@/db/schema';
+import { eq, inArray, desc, count } from 'drizzle-orm';
+import { IMemory } from '@/models/Memory';
 
 interface CreateInput {
   content: string;
@@ -11,23 +13,31 @@ interface CreateInput {
 
 export class MemoryRepository {
   async create(data: CreateInput): Promise<IMemory> {
-    await connectToDatabase();
-    return Memory.create(data);
+    const [entry] = await db
+      .insert(memories)
+      .values({
+        content: data.content,
+        type: data.type,
+        title: data.title,
+        tags: data.tags,
+        linkedMemoryIds: data.linkedMemoryIds ?? [],
+      })
+      .returning();
+    return entry;
   }
 
   async findByIds(ids: string[]): Promise<IMemory[]> {
-    await connectToDatabase();
-    return Memory.find({ _id: { $in: ids } });
+    if (ids.length === 0) return [];
+    return db.select().from(memories).where(inArray(memories.id, ids));
   }
 
   async findAll(): Promise<IMemory[]> {
-    await connectToDatabase();
-    return Memory.find().sort({ createdAt: -1 }).limit(100);
+    return db.select().from(memories).orderBy(desc(memories.createdAt)).limit(100);
   }
 
   async count(): Promise<number> {
-    await connectToDatabase();
-    return Memory.countDocuments();
+    const [{ total }] = await db.select({ total: count() }).from(memories);
+    return Number(total);
   }
 }
 

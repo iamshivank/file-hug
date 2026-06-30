@@ -17,7 +17,7 @@ export default function LinkPreview({ memory, onClose }: LinkPreviewProps) {
   // Tracking the loaded memory id (rather than a boolean) makes the spinner
   // reappear automatically when the user switches to another card.
   const [loadedId, setLoadedId] = useState<string | null>(null);
-  const isLoaded = loadedId === memory._id;
+  const isLoaded = loadedId === memory.id;
 
   const embed = getEmbedInfo(memory.content);
   const detection = detectContent(memory.content);
@@ -94,10 +94,10 @@ export default function LinkPreview({ memory, onClose }: LinkPreviewProps) {
               </div>
             )}
             <iframe
-              key={memory._id}
+              key={memory.id}
               src={embed.src}
               title={memory.title}
-              onLoad={() => setLoadedId(memory._id)}
+              onLoad={() => setLoadedId(memory.id)}
               allow="autoplay; encrypted-media; picture-in-picture; clipboard-write"
               allowFullScreen
               sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"

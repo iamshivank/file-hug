@@ -36,7 +36,7 @@ export class WaitlistService {
       const { position } = await waitlistRepository.create({ name, email });
       return { success: true, data: { message: 'Successfully joined the waitlist!', position } };
     } catch (error) {
-      if ((error as { code?: number }).code === 11000) {
+      if ((error as { code?: string }).code === '23505') {
         return { success: false, error: 'This email is already on the waitlist.' };
       }
       throw error;
