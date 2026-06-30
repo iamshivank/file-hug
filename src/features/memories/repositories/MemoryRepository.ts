@@ -11,6 +11,12 @@ interface CreateInput {
   linkedMemoryIds?: string[];
 }
 
+interface UpdateInput {
+  content?: string;
+  title?: string;
+  linkedMemoryIds?: string[];
+}
+
 export class MemoryRepository {
   async create(data: CreateInput): Promise<IMemory> {
     const [entry] = await db
@@ -26,9 +32,23 @@ export class MemoryRepository {
     return entry;
   }
 
+  async findById(id: string): Promise<IMemory | undefined> {
+    const [entry] = await db.select().from(memories).where(eq(memories.id, id)).limit(1);
+    return entry;
+  }
+
   async findByIds(ids: string[]): Promise<IMemory[]> {
     if (ids.length === 0) return [];
     return db.select().from(memories).where(inArray(memories.id, ids));
+  }
+
+  async update(id: string, data: UpdateInput): Promise<IMemory | undefined> {
+    const [entry] = await db
+      .update(memories)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(memories.id, id))
+      .returning();
+    return entry;
   }
 
   async findAll(): Promise<IMemory[]> {

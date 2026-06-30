@@ -1,7 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { MemoryData, SaveMemoryInput, FetchResult, SaveResult } from '../types/memory.types';
+import {
+  MemoryData,
+  SaveMemoryInput,
+  UpdateMemoryInput,
+  FetchResult,
+  SaveResult,
+} from '../types/memory.types';
 import { DEMO_MEMORIES } from '../data/demoMemories';
 import { detectContent } from '../utils/urlDetection';
 
@@ -35,6 +41,24 @@ function buildLocalMemory(input: SaveMemoryInput): MemoryData {
     tags,
     createdAt: new Date().toISOString(),
   };
+}
+
+function noteTitleFrom(body: string): string {
+  const firstLine = body.trim().split('\n')[0].trim();
+  return firstLine.length > 80 ? firstLine.slice(0, 80) + '...' : firstLine || 'Untitled note';
+}
+
+/** Mirror of the server update, used only in demo mode (no DB). */
+function applyLocalUpdate(memory: MemoryData, input: UpdateMemoryInput): MemoryData {
+  const next: MemoryData = { ...memory, updatedAt: new Date().toISOString() };
+  if (input.content !== undefined) next.content = input.content.trim();
+  if (input.title !== undefined) {
+    next.title = input.title.trim() || noteTitleFrom(next.content);
+  }
+  if (input.linkedMemoryIds !== undefined && memory.type === 'note') {
+    next.linkedMemoryIds = input.linkedMemoryIds;
+  }
+  return next;
 }
 
 export function useMemories() {
@@ -106,5 +130,37 @@ export function useMemories() {
     }
   }, []);
 
-  return { memories, isLoading, error, isSaving, save, refresh: fetchMemories };
+  const update = useCallback(async (input: UpdateMemoryInput): Promise<boolean> => {
+    if (!input.id) return false;
+    setError(null);
+
+    if (IS_DEMO) {
+      setMemories((prev) =>
+        prev.map((m) => (m.id === input.id ? applyLocalUpdate(m, input) : m))
+      );
+      return true;
+    }
+
+    try {
+      const res = await fetch('/api/memories', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+      const json: SaveResult = await res.json();
+      if (json.success && json.data) {
+        const updated = json.data.memory;
+        setMemories((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+        return true;
+      } else {
+        setError(json.error ?? 'Failed to update.');
+        return false;
+      }
+    } catch {
+      setError('Network error. Please try again.');
+      return false;
+    }
+  }, []);
+
+  return { memories, isLoading, error, isSaving, save, update, refresh: fetchMemories };
 }

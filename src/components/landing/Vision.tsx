@@ -36,7 +36,7 @@ export default function Vision() {
   }, []);
 
   return (
-    <section ref={sectionRef} className="relative section-padding">
+    <section ref={sectionRef} className="relative section-padding overflow-hidden">
       <div className="glow-orb w-100 h-100 bg-accent top-1/3 -right-32" />
 
       <div className="relative z-10 max-w-3xl mx-auto">

@@ -76,7 +76,7 @@ export default function Waitlist() {
   };
 
   return (
-    <section ref={sectionRef} id="waitlist" className="relative section-padding bg-dots">
+    <section ref={sectionRef} id="waitlist" className="relative section-padding bg-dots overflow-hidden">
       <div className="glow-orb w-125 h-125 bg-primary top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
 
       <div className="relative z-10 max-w-md mx-auto">

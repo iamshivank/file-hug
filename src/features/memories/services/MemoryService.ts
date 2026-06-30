@@ -1,5 +1,10 @@
 import { memoryRepository } from '@/features/memories/repositories/MemoryRepository';
-import { SaveMemoryInput, SaveResult, FetchResult } from '@/features/memories/types/memory.types';
+import {
+  SaveMemoryInput,
+  UpdateMemoryInput,
+  SaveResult,
+  FetchResult,
+} from '@/features/memories/types/memory.types';
 import { detectContent } from '@/features/memories/utils/urlDetection';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -39,6 +44,54 @@ export class MemoryService {
 
     const { type, title, tags } = detectContent(content);
     const memory = await memoryRepository.create({ content, type, title, tags });
+    return { success: true, data: { memory } };
+  }
+
+  async update(input: UpdateMemoryInput): Promise<SaveResult> {
+    if (!input.id || !UUID_REGEX.test(input.id)) {
+      return { success: false, error: 'A valid memory id is required.' };
+    }
+
+    const existing = await memoryRepository.findById(input.id);
+    if (!existing) {
+      return { success: false, error: 'Memory not found.' };
+    }
+
+    const patch: { content?: string; title?: string; linkedMemoryIds?: string[] } = {};
+
+    if (input.content !== undefined) {
+      const content = input.content.trim();
+      if (content.length === 0) {
+        return { success: false, error: 'Content is required.' };
+      }
+      if (content.length > 5000) {
+        return { success: false, error: 'Content must be under 5000 characters.' };
+      }
+      patch.content = content;
+    }
+
+    if (input.title !== undefined) {
+      const fallbackBody = patch.content ?? existing.content;
+      const title = input.title.trim() || noteTitleFrom(fallbackBody);
+      if (title.length > 200) {
+        return { success: false, error: 'Title must be under 200 characters.' };
+      }
+      patch.title = title;
+    }
+
+    // Connected links only apply to notes; ignore the field for link memories.
+    if (input.linkedMemoryIds !== undefined && existing.type === 'note') {
+      patch.linkedMemoryIds = await this.resolveLinkedIds(input.linkedMemoryIds);
+    }
+
+    if (Object.keys(patch).length === 0) {
+      return { success: true, data: { memory: existing } };
+    }
+
+    const memory = await memoryRepository.update(input.id, patch);
+    if (!memory) {
+      return { success: false, error: 'Memory not found.' };
+    }
     return { success: true, data: { memory } };
   }
 

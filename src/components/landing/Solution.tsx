@@ -44,7 +44,7 @@ export default function Solution() {
   }, []);
 
   return (
-    <section ref={sectionRef} className="relative section-padding bg-dots">
+    <section ref={sectionRef} className="relative section-padding bg-dots overflow-hidden">
       <div className="glow-orb w-100 h-100 bg-primary top-1/3 -left-32" />
 
       <div className="relative z-10 max-w-5xl mx-auto">

@@ -8,13 +8,15 @@ import SaveMemoryForm from './SaveMemoryForm';
 import MemoryCard from './MemoryCard';
 import EmptyState from './EmptyState';
 import LinkPreview from './LinkPreview';
+import NotePreview from './NotePreview';
 
 type Filter = 'all' | 'links' | 'notes';
 
 export default function MemoryDashboard() {
-  const { memories, isLoading, error, isSaving, save } = useMemories();
+  const { memories, isLoading, error, isSaving, save, update } = useMemories();
   const [filter, setFilter] = useState<Filter>('all');
   const [preview, setPreview] = useState<MemoryData | null>(null);
+  const [activeNote, setActiveNote] = useState<{ id: string; edit: boolean } | null>(null);
 
   const links = memories.filter((m) => m.type === 'url');
   const notes = memories.filter((m) => m.type === 'note');
@@ -25,6 +27,16 @@ export default function MemoryDashboard() {
     (memory.linkedMemoryIds ?? [])
       .map((id) => linksById.get(id))
       .filter((l): l is MemoryData => !!l);
+
+  // Resolve by id so the open note reflects edits as `memories` updates.
+  const activeNoteMemory = activeNote
+    ? memories.find((m) => m.id === activeNote.id) ?? null
+    : null;
+
+  const openLinkFromNote = (link: MemoryData) => {
+    setActiveNote(null);
+    setPreview(link);
+  };
 
   const filterTabs: { key: Filter; label: string; count: number }[] = [
     { key: 'all', label: 'All', count: memories.length },
@@ -97,7 +109,16 @@ export default function MemoryDashboard() {
               <MemoryCard
                 key={memory.id}
                 memory={memory}
-                onOpen={memory.type === 'url' ? () => setPreview(memory) : undefined}
+                onOpen={
+                  memory.type === 'url'
+                    ? () => setPreview(memory)
+                    : () => setActiveNote({ id: memory.id, edit: false })
+                }
+                onEdit={
+                  memory.type === 'note'
+                    ? () => setActiveNote({ id: memory.id, edit: true })
+                    : undefined
+                }
                 connectedLinks={memory.type === 'note' ? connectedLinksFor(memory) : undefined}
                 onOpenConnected={setPreview}
               />
@@ -107,6 +128,18 @@ export default function MemoryDashboard() {
       </section>
 
       {preview && <LinkPreview memory={preview} onClose={() => setPreview(null)} />}
+      {activeNoteMemory && (
+        <NotePreview
+          key={activeNoteMemory.id}
+          memory={activeNoteMemory}
+          startInEdit={activeNote?.edit ?? false}
+          connectedLinks={connectedLinksFor(activeNoteMemory)}
+          savedLinks={links}
+          onClose={() => setActiveNote(null)}
+          onOpenLink={openLinkFromNote}
+          onSave={update}
+        />
+      )}
     </div>
   );
 }

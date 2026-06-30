@@ -32,3 +32,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 }
+
+export async function PATCH(request: NextRequest): Promise<NextResponse> {
+  try {
+    const body = await request.json();
+    const result = await memoryService.update(body);
+
+    if (!result.success) {
+      return NextResponse.json(result, { status: 400 });
+    }
+
+    return NextResponse.json(result, { status: 200 });
+  } catch (error) {
+    console.error('Memories PATCH error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to update memory.' },
+      { status: 500 }
+    );
+  }
+}

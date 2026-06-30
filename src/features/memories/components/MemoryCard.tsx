@@ -1,6 +1,6 @@
 'use client';
 
-import { Clock } from 'lucide-react';
+import { Clock, Pencil } from 'lucide-react';
 import { MemoryData } from '../types/memory.types';
 import PlatformIcon from './PlatformIcon';
 
@@ -19,8 +19,10 @@ function timeAgo(dateInput: string | Date): string {
 
 interface MemoryCardProps {
   memory: MemoryData;
-  /** Opens the PiP preview — only passed for URL cards. */
+  /** Opens the preview/popup for this card. */
   onOpen?: () => void;
+  /** Opens this card straight into edit mode — only passed for notes. */
+  onEdit?: () => void;
   /** Resolved link memories this note is connected to. */
   connectedLinks?: MemoryData[];
   /** Opens the PiP preview for a connected link. */
@@ -30,6 +32,7 @@ interface MemoryCardProps {
 export default function MemoryCard({
   memory,
   onOpen,
+  onEdit,
   connectedLinks = [],
   onOpenConnected,
 }: MemoryCardProps) {
@@ -70,9 +73,24 @@ export default function MemoryCard({
             {badgeText}
           </span>
         </div>
-        <div className="flex items-center gap-1 text-muted text-xs shrink-0">
-          <Clock className="w-3 h-3" />
-          <span>{timeAgo(memory.createdAt)}</span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 text-muted text-xs">
+            <Clock className="w-3 h-3" />
+            <span>{timeAgo(memory.createdAt)}</span>
+          </div>
+          {onEdit && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
+              }}
+              aria-label="Edit note"
+              className="w-7 h-7 -mr-1 rounded-lg flex items-center justify-center text-muted hover:text-primary-light hover:bg-surface-hover transition-colors cursor-pointer"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 

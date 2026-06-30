@@ -21,6 +21,17 @@ export interface SaveMemoryInput {
   linkedMemoryIds?: string[];
 }
 
+export interface UpdateMemoryInput {
+  /** Id of the memory to update. */
+  id: string;
+  /** New title — only applied when provided. */
+  title?: string;
+  /** New body/content — only applied when provided. */
+  content?: string;
+  /** Full replacement set of connected link ids — note mode only. */
+  linkedMemoryIds?: string[];
+}
+
 export interface SaveResult {
   success: boolean;
   data?: { memory: MemoryData };
