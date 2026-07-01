@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, FileText, ExternalLink, Pencil, Check, Loader2 } from 'lucide-react';
 import { MemoryData, UpdateMemoryInput } from '../types/memory.types';
 import PlatformIcon from './PlatformIcon';
 import ConnectLinksField from './ConnectLinksField';
+import { playFlipOpen } from '../utils/flip';
 
 interface NotePreviewProps {
   memory: MemoryData;
@@ -14,6 +15,8 @@ interface NotePreviewProps {
   savedLinks: MemoryData[];
   /** Open straight into edit mode (e.g. from a card's edit button). */
   startInEdit?: boolean;
+  /** On-screen rect of the clicked card — the flip origin for the popup. */
+  originRect?: DOMRect | null;
   onClose: () => void;
   /** Opens the link preview for a connected link (closes this modal first). */
   onOpenLink: (link: MemoryData) => void;
@@ -27,6 +30,7 @@ export default function NotePreview({
   connectedLinks,
   savedLinks,
   startInEdit = false,
+  originRect,
   onClose,
   onOpenLink,
   onSave,
@@ -36,6 +40,16 @@ export default function NotePreview({
   const [body, setBody] = useState(memory.content);
   const [linkedIds, setLinkedIds] = useState<string[]>(memory.linkedMemoryIds ?? []);
   const [saving, setSaving] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // On mount, flip the modal open from the clicked card's position.
+  useEffect(() => {
+    if (cardRef.current) {
+      playFlipOpen(cardRef.current, originRect, { transformOrigin: 'center top' });
+    }
+    // Only run once on open — `originRect` is captured at click time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (e: globalThis.KeyboardEvent) => {
@@ -86,15 +100,16 @@ export default function NotePreview({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in flip-stage"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px] animate-fade-in flip-stage"
       onClick={onClose}
     >
       <div
+        ref={cardRef}
         role="dialog"
         aria-modal="true"
         aria-label={editing ? `Editing note: ${memory.title}` : `Note: ${memory.title}`}
         onClick={(e) => e.stopPropagation()}
-        className="flip-card w-full max-w-lg max-h-[85vh] flex flex-col glass-strong rounded-2xl border border-border-strong shadow-2xl shadow-black/60 animate-card-flip overflow-hidden"
+        className="flip-card w-full max-w-lg max-h-[85vh] flex flex-col glass-strong rounded-2xl border border-border-strong shadow-2xl shadow-black/60 overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-center gap-2.5 pl-3.5 pr-2 py-2.5 border-b border-border shrink-0">

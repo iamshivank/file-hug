@@ -120,7 +120,7 @@ export default function Hero() {
             </button>
           </div>
           <Link
-            href="/app"
+            href="/login"
             className="group inline-flex items-center gap-1.5 text-sm text-muted hover:text-primary-light transition-colors"
           >
             <span className="underline decoration-border underline-offset-4 group-hover:decoration-primary">
