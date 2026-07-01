@@ -1,19 +1,23 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, ExternalLink, Loader2, Globe } from 'lucide-react';
 import { MemoryData } from '../types/memory.types';
 import { getEmbedInfo } from '../utils/embed';
 import { detectContent } from '../utils/urlDetection';
+import { playFlipOpen } from '../utils/flip';
 import PlatformIcon from './PlatformIcon';
 
 interface LinkPreviewProps {
   memory: MemoryData;
+  /** On-screen rect of the clicked card — the flip origin for the PiP. */
+  originRect?: DOMRect | null;
   onClose: () => void;
 }
 
 /** Floating picture-in-picture viewer for a saved link's content. */
-export default function LinkPreview({ memory, onClose }: LinkPreviewProps) {
+export default function LinkPreview({ memory, originRect, onClose }: LinkPreviewProps) {
+  const cardRef = useRef<HTMLDivElement>(null);
   // Tracking the loaded memory id (rather than a boolean) makes the spinner
   // reappear automatically when the user switches to another card.
   const [loadedId, setLoadedId] = useState<string | null>(null);
@@ -21,6 +25,15 @@ export default function LinkPreview({ memory, onClose }: LinkPreviewProps) {
 
   const embed = getEmbedInfo(memory.content);
   const detection = detectContent(memory.content);
+
+  // On mount, flip the PiP open from the clicked card toward its resting corner.
+  useEffect(() => {
+    if (cardRef.current) {
+      playFlipOpen(cardRef.current, originRect, { transformOrigin: 'top left' });
+    }
+    // Only run once on open — `originRect` is captured at click time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (e: globalThis.KeyboardEvent) => {
@@ -55,9 +68,12 @@ export default function LinkPreview({ memory, onClose }: LinkPreviewProps) {
     <div
       role="dialog"
       aria-label={`Preview of ${memory.title}`}
-      className={`fixed bottom-4 right-4 z-50 ${sizeClass} animate-slide-up`}
+      className={`fixed bottom-4 right-4 z-50 ${sizeClass} flip-stage`}
     >
-      <div className="glass-strong rounded-2xl border border-border-strong shadow-2xl shadow-black/60 overflow-hidden">
+      <div
+        ref={cardRef}
+        className="flip-card-pip glass-strong rounded-2xl border border-border-strong shadow-2xl shadow-black/60 overflow-hidden"
+      >
         {/* Header */}
         <div className="flex items-center gap-2.5 pl-3.5 pr-2 py-2.5 border-b border-border">
           <div className="text-primary-light shrink-0">

@@ -19,14 +19,14 @@ function timeAgo(dateInput: string | Date): string {
 
 interface MemoryCardProps {
   memory: MemoryData;
-  /** Opens the preview/popup for this card. */
-  onOpen?: () => void;
+  /** Opens the preview/popup for this card, anchored to its on-screen rect. */
+  onOpen?: (rect: DOMRect) => void;
   /** Opens this card straight into edit mode — only passed for notes. */
   onEdit?: () => void;
   /** Resolved link memories this note is connected to. */
   connectedLinks?: MemoryData[];
-  /** Opens the PiP preview for a connected link. */
-  onOpenConnected?: (link: MemoryData) => void;
+  /** Opens the PiP preview for a connected link, anchored to the clicked row. */
+  onOpenConnected?: (link: MemoryData, rect: DOMRect) => void;
 }
 
 export default function MemoryCard({
@@ -44,17 +44,23 @@ export default function MemoryCard({
   // for notes, drop the implicit "note" tag from the chip row.
   const extraTags = (isUrl ? memory.tags.slice(2) : memory.tags.filter((t) => t !== 'note')).slice(0, 3);
 
+  // The card's on-screen rect is the flip origin for the popup — capture it
+  // from the element itself so click and keyboard opens both anchor correctly.
+  const handleOpen = (el: HTMLElement) => {
+    onOpen?.(el.getBoundingClientRect());
+  };
+
   return (
     <div
       role={onOpen ? 'button' : undefined}
       tabIndex={onOpen ? 0 : undefined}
-      onClick={onOpen}
+      onClick={(e) => handleOpen(e.currentTarget)}
       onKeyDown={
         onOpen
           ? (e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                onOpen();
+                handleOpen(e.currentTarget);
               }
             }
           : undefined
@@ -113,7 +119,7 @@ export default function MemoryCard({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onOpenConnected?.(link);
+                onOpenConnected?.(link, e.currentTarget.getBoundingClientRect());
               }}
               className="inline-flex items-center gap-2 px-2 py-1.5 -mx-1 rounded-lg text-left text-xs text-primary-light hover:bg-surface-hover transition-colors cursor-pointer min-w-0"
             >

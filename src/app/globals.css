@@ -57,7 +57,11 @@
   --animate-slide-up-delayed: slide-up 0.6s ease-out 0.2s both;
   --animate-fade-in: fade-in 0.8s ease-out;
   --animate-shimmer: shimmer 3s linear infinite;
+  /* Faster fade specifically for the popup scrim (still decelerating). */
+  --animate-fade-in-fast: fade-in 0.28s ease-out both;
   --animate-card-flip: card-flip 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  /* Shared-element flip: opens from the clicked card's rect (--fx/--fy/--fs). */
+  --animate-flip-open: flip-open 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
 }
 
 /* ===== Keyframes ===== */
@@ -86,7 +90,8 @@
   100% { background-position: 200% 0; }
 }
 
-/* CRED-style "card opening" — a 3D flip-down reveal with a slight overshoot. */
+/* CRED-style "card opening" — a 3D flip-down reveal with a slight overshoot.
+   Decelerating (ease-out) entrance: no ease-in on the way open. */
 @keyframes card-flip {
   0% {
     opacity: 0;
@@ -98,6 +103,27 @@
   100% {
     opacity: 1;
     transform: rotateX(0deg) translateY(0) scale(1);
+  }
+}
+
+/* Shared-element flip: the popup starts overlapping the clicked card (via the
+   inline --fx/--fy/--fs offsets computed from its getBoundingClientRect) and a
+   top-hinge rotateX, then settles into its resting position at identity.
+   Entrance stays decelerating — the overshoot bezier still reads as ease-out. */
+@keyframes flip-open {
+  0% {
+    opacity: 0.6;
+    transform:
+      translate(var(--fx, 0px), var(--fy, 0px))
+      scale(var(--fs, 0.9))
+      rotateX(-30deg);
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0px, 0px) scale(1) rotateX(0deg);
   }
 }
 
@@ -114,8 +140,18 @@
   will-change: transform, opacity;
 }
 
+/* PiP variant: hinge from the top-left so it reads as flipping open toward its
+   bottom-right resting corner. */
+.flip-card-pip {
+  transform-origin: top left;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .flip-card {
+  .flip-card,
+  .flip-card-pip {
     animation: fade-in 0.3s ease-out both;
   }
 }

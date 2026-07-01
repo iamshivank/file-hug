@@ -22,7 +22,7 @@ export default function Footer() {
               <span className="font-display text-xl text-foreground">File Hug</span>
             </div>
             <Link
-              href="/app"
+              href="/login"
               className="group inline-flex items-center gap-1.5 text-sm text-muted hover:text-primary-light transition-colors"
             >
               Open the demo app
