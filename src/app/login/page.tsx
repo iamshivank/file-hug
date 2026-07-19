@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Heart, ArrowLeft } from 'lucide-react';
+import CredentialsForm from '@/features/auth/CredentialsForm';
 
 export const metadata = {
   title: 'Sign in — File Hug',
@@ -55,6 +56,14 @@ export default function LoginPage() {
             <p className="text-sm text-muted-light mt-2 leading-relaxed">
               Save links &amp; notes, then find them later.
             </p>
+          </div>
+
+          <CredentialsForm />
+
+          <div className="flex items-center gap-3 my-5" aria-hidden="true">
+            <div className="flex-1 h-px bg-border-strong" />
+            <span className="text-xs text-muted">or</span>
+            <div className="flex-1 h-px bg-border-strong" />
           </div>
 
           <a

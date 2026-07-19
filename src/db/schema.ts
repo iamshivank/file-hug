@@ -20,6 +20,8 @@ export const users = pgTable('users', {
   name: varchar('name', { length: 200 }).notNull(),
   image: text('image'),
   googleId: varchar('google_id', { length: 255 }),
+  // scrypt hash for email/password accounts; null for Google-only users.
+  passwordHash: text('password_hash'),
   isDemo: boolean('is_demo').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
