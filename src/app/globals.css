@@ -60,6 +60,7 @@
   --gradient-start: #f0872f;
   --gradient-mid: #d9631a;
   --gradient-end: #cf4f2b;
+  --on-accent: #ffffff;         /* light contrasting text on accent backgrounds */
 }
 
 @media (prefers-color-scheme: light) {
@@ -87,6 +88,7 @@
     --gradient-start: #f0872f;
     --gradient-mid: #d9631a;
     --gradient-end: #cf4f2b;
+    --on-accent: #ffffff;
   }
 }
 
@@ -462,6 +464,7 @@ body {
   --card-rotate-y: 0deg;
   --card-glow-x: 50%;
   --card-glow-y: 45%;
+
   position: relative;
   overflow: hidden;
   transform: perspective(900px) rotateX(var(--card-rotate-x)) rotateY(var(--card-rotate-y));

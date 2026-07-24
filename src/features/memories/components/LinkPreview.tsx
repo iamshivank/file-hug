@@ -192,7 +192,7 @@ export default function LinkPreview({
         )}
 
         {/* Linked notes — the reverse side of connecting notes to links */}
-        <div className="border-t border-border overflow-y-auto">
+        <div className="border-t border-border overflow-y-auto flex-1 min-h-0">
           <div className="flex items-center justify-between gap-2 px-3.5 pt-3 pb-1">
             <span className="text-[11px] uppercase tracking-wider text-muted font-medium">
               Linked notes

@@ -34,25 +34,32 @@ export class MemoryRepository {
     return entry;
   }
 
-  /** Fetch one memory. When `userId` is given, only returns it if that user owns it. */
+  /** Fetch one memory. When `userId` is given, only returns it if that user owns it.
+   * When `userId` is omitted, only returns memories with NULL userId (seed/demo rows). */
   async findById(id: string, userId?: string): Promise<IMemory | undefined> {
-    const where = userId ? and(eq(memories.id, id), eq(memories.userId, userId)) : eq(memories.id, id);
+    const where = userId
+      ? and(eq(memories.id, id), eq(memories.userId, userId))
+      : and(eq(memories.id, id), sql`user_id IS NULL`);
     const [entry] = await db.select().from(memories).where(where).limit(1);
     return entry;
   }
 
-  /** Fetch many memories by id, scoped to the owner when `userId` is given. */
+  /** Fetch many memories by id, scoped to the owner when `userId` is given.
+   * When `userId` is omitted, only returns memories with NULL userId. */
   async findByIds(ids: string[], userId?: string): Promise<IMemory[]> {
     if (ids.length === 0) return [];
     const where = userId
       ? and(inArray(memories.id, ids), eq(memories.userId, userId))
-      : inArray(memories.id, ids);
+      : and(inArray(memories.id, ids), sql`user_id IS NULL`);
     return db.select().from(memories).where(where);
   }
 
-  /** Update a memory. When `userId` is given, the write is scoped to the owner. */
+  /** Update a memory. When `userId` is given, the write is scoped to the owner.
+   * When `userId` is omitted, only updates memories with NULL userId. */
   async update(id: string, data: UpdateInput, userId?: string): Promise<IMemory | undefined> {
-    const where = userId ? and(eq(memories.id, id), eq(memories.userId, userId)) : eq(memories.id, id);
+    const where = userId
+      ? and(eq(memories.id, id), eq(memories.userId, userId))
+      : and(eq(memories.id, id), sql`user_id IS NULL`);
     const [entry] = await db
       .update(memories)
       .set({ ...data, updatedAt: new Date() })
@@ -63,25 +70,36 @@ export class MemoryRepository {
 
   /**
    * Add `otherId` to a memory's `linkedMemoryIds` (idempotent). Used to keep the
-   * connection symmetric — when A links to B we also record A on B. Scoped to the
-   * owner so one user can never mutate another user's connections.
+   * connection symmetric — when A links to B we also record A on B.
+   * REQUIRES an explicit `userId` — does not mutate rows when `userId` is omitted.
+   * Limits incoming connections to MAX_CONNECTIONS (25) to prevent unbounded growth.
    */
   async addConnection(id: string, otherId: string, userId?: string): Promise<void> {
-    const owner = userId ? sql` AND user_id = ${userId}` : sql``;
+    if (!userId) {
+      // Do not mutate rows when userId is absent (no unscoped mutations).
+      return;
+    }
     await db.execute(sql`
       UPDATE memories
       SET linked_memory_ids = array_append(linked_memory_ids, ${otherId}), updated_at = now()
-      WHERE id = ${id} AND NOT (${otherId} = ANY(linked_memory_ids))${owner}
+      WHERE id = ${id}
+        AND user_id = ${userId}
+        AND NOT (${otherId} = ANY(linked_memory_ids))
+        AND array_length(linked_memory_ids, 1) < 25
     `);
   }
 
-  /** Remove `otherId` from a memory's `linkedMemoryIds` (the reverse of addConnection). */
+  /** Remove `otherId` from a memory's `linkedMemoryIds` (the reverse of addConnection).
+   * REQUIRES an explicit `userId` — does not mutate rows when `userId` is omitted. */
   async removeConnection(id: string, otherId: string, userId?: string): Promise<void> {
-    const owner = userId ? sql` AND user_id = ${userId}` : sql``;
+    if (!userId) {
+      // Do not mutate rows when userId is absent (no unscoped mutations).
+      return;
+    }
     await db.execute(sql`
       UPDATE memories
       SET linked_memory_ids = array_remove(linked_memory_ids, ${otherId}), updated_at = now()
-      WHERE id = ${id}${owner}
+      WHERE id = ${id} AND user_id = ${userId}
     `);
   }
 

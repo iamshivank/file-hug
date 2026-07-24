@@ -47,6 +47,13 @@ async def backfill(user_id: str | None, batch_size: int) -> int:
         ]
         vectors = await embedder.embed_batch(texts)
 
+        # Validate that the embedder returned the correct number of vectors.
+        if len(vectors) != len(rows):
+            raise ValueError(
+                f"Embedder returned {len(vectors)} vectors but expected {len(rows)} "
+                f"(one per row). Cannot proceed with mismatched counts."
+            )
+
         for row, vec in zip(rows, vectors):
             await db.update_embedding(row["id"], vec)
 

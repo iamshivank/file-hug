@@ -45,7 +45,7 @@ class SearchResult(BaseModel):
 class SearchResponse(BaseModel):
     query: str
     count: int
-    mode: str = Field(description="Effective search mode: 'hybrid', 'fts', or 'ilike'.")
+    mode: str = Field(description="Effective search mode: 'hybrid' (FTS+semantic), 'semantic' (semantic-only), 'fts', or 'ilike'.")
     results: list[SearchResult] = Field(default_factory=list)
 
 

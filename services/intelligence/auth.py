@@ -96,6 +96,20 @@ def verify_token(token: str, secret: str) -> SessionUser:
     if not user_id:
         raise ValueError("Payload missing id")
 
+    # Validate expiration timestamp.
+    exp = payload.get("exp")
+    if exp is None:
+        raise ValueError("Token missing exp claim")
+    try:
+        exp_timestamp = float(exp)
+    except (ValueError, TypeError) as exc:
+        raise ValueError("Token exp claim is malformed") from exc
+
+    import time
+    now = time.time()
+    if exp_timestamp <= now:
+        raise ValueError("Token has expired")
+
     return SessionUser(
         id=str(user_id),
         email=payload.get("email"),

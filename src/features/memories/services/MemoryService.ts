@@ -8,6 +8,7 @@ import {
 import { detectContent } from '@/features/memories/utils/urlDetection';
 import { getUserPlan } from '@/features/billing/subscription';
 import { PLANS } from '@/features/billing/plans';
+import { db } from '@/lib/db';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -40,18 +41,36 @@ export class MemoryService {
       }
 
       const linkedMemoryIds = await this.resolveLinkedIds(input.linkedMemoryIds, userId);
-      const memory = await memoryRepository.create({
-        content: body,
-        type: 'note',
-        title,
-        tags: ['note'],
-        linkedMemoryIds,
-        userId,
-      });
 
-      // Mirror the connection onto every linked memory so it's discoverable
-      // from both directions (a link now knows which notes point at it).
-      await Promise.all(linkedMemoryIds.map((id) => memoryRepository.addConnection(id, memory.id, userId)));
+      // Use a transaction to make the record write and bidirectional connection
+      // updates atomic. If any connection fails, roll back the entire operation.
+      const memory = await db.transaction(async (tx) => {
+        const [newMemory] = await tx
+          .insert((await import('@/db/schema')).memories)
+          .values({
+            content: body,
+            type: 'note',
+            title,
+            tags: ['note'],
+            linkedMemoryIds,
+            userId,
+          })
+          .returning();
+
+        // Mirror the connection onto every linked memory within the same transaction.
+        for (const linkedId of linkedMemoryIds) {
+          await tx.execute((await import('drizzle-orm')).sql`
+            UPDATE memories
+            SET linked_memory_ids = array_append(linked_memory_ids, ${newMemory.id}), updated_at = now()
+            WHERE id = ${linkedId}
+              AND user_id = ${userId}
+              AND NOT (${newMemory.id} = ANY(linked_memory_ids))
+              AND array_length(linked_memory_ids, 1) < 25
+          `);
+        }
+
+        return newMemory;
+      });
 
       return { success: true, data: { memory } };
     }
@@ -82,7 +101,38 @@ export class MemoryService {
       }
     }
 
-    const memory = await memoryRepository.create({ content, type, title, tags, userId });
+    const linkedMemoryIds = await this.resolveLinkedIds(input.linkedMemoryIds, userId);
+
+    // Use a transaction to make the record write and bidirectional connection
+    // updates atomic.
+    const memory = await db.transaction(async (tx) => {
+      const [newMemory] = await tx
+        .insert((await import('@/db/schema')).memories)
+        .values({
+          content,
+          type,
+          title,
+          tags,
+          linkedMemoryIds,
+          userId,
+        })
+        .returning();
+
+      // Mirror the connection onto every linked memory within the same transaction.
+      for (const linkedId of linkedMemoryIds) {
+        await tx.execute((await import('drizzle-orm')).sql`
+          UPDATE memories
+          SET linked_memory_ids = array_append(linked_memory_ids, ${newMemory.id}), updated_at = now()
+          WHERE id = ${linkedId}
+            AND user_id = ${userId}
+            AND NOT (${newMemory.id} = ANY(linked_memory_ids))
+            AND array_length(linked_memory_ids, 1) < 25
+        `);
+      }
+
+      return newMemory;
+    });
+
     return { success: true, data: { memory } };
   }
 
@@ -91,8 +141,12 @@ export class MemoryService {
       return { success: false, error: 'A valid memory id is required.' };
     }
 
-    // Ownership check: only the owner can read/update this memory. When no user
-    // is resolved we fall back to an unscoped lookup (seed/anon rows).
+    // Ownership check: require a defined userId. Unauthenticated/demo callers
+    // cannot update memories.
+    if (!userId) {
+      return { success: false, error: 'Memory not found.' };
+    }
+
     const existing = await memoryRepository.findById(input.id, userId);
     if (!existing) {
       return { success: false, error: 'Memory not found.' };
@@ -129,12 +183,51 @@ export class MemoryService {
       const added = nextIds.filter((id) => !prevIds.includes(id));
       const removed = prevIds.filter((id) => !nextIds.includes(id));
 
-      await Promise.all([
-        ...added.map((id) => memoryRepository.addConnection(id, existing.id, userId)),
-        ...removed.map((id) => memoryRepository.removeConnection(id, existing.id, userId)),
-      ]);
-
       patch.linkedMemoryIds = nextIds;
+
+      // Use a transaction to make the update and bidirectional connection changes atomic.
+      const memory = await db.transaction(async (tx) => {
+        // Apply the patch to the main memory record.
+        const patchToApply = Object.keys(patch).length > 0 ? patch : null;
+        let updated = existing;
+        if (patchToApply) {
+          const { memories: memoriesTable } = await import('@/db/schema');
+          const { and, eq } = await import('drizzle-orm');
+          const [result] = await tx
+            .update(memoriesTable)
+            .set({ ...patchToApply, updatedAt: new Date() })
+            .where(and(eq(memoriesTable.id, input.id), eq(memoriesTable.userId, userId)))
+            .returning();
+          if (!result) {
+            throw new Error('Memory not found during update');
+          }
+          updated = result;
+        }
+
+        // Mirror all connection changes within the same transaction.
+        const { sql: sqlHelper } = await import('drizzle-orm');
+        for (const id of added) {
+          await tx.execute(sqlHelper`
+            UPDATE memories
+            SET linked_memory_ids = array_append(linked_memory_ids, ${existing.id}), updated_at = now()
+            WHERE id = ${id}
+              AND user_id = ${userId}
+              AND NOT (${existing.id} = ANY(linked_memory_ids))
+              AND array_length(linked_memory_ids, 1) < 25
+          `);
+        }
+        for (const id of removed) {
+          await tx.execute(sqlHelper`
+            UPDATE memories
+            SET linked_memory_ids = array_remove(linked_memory_ids, ${existing.id}), updated_at = now()
+            WHERE id = ${id} AND user_id = ${userId}
+          `);
+        }
+
+        return updated;
+      });
+
+      return { success: true, data: { memory } };
     }
 
     if (Object.keys(patch).length === 0) {
@@ -152,9 +245,10 @@ export class MemoryService {
    * Keep only ids that point to real memories the user owns (max MAX_CONNECTIONS),
    * excluding `selfId`. Both notes and links may be connected — the relationship
    * is an undirected graph, so we no longer restrict targets to link (url) type.
+   * REQUIRES a defined `userId` — returns empty array when userId is absent.
    */
   private async resolveLinkedIds(ids?: string[], userId?: string, selfId?: string): Promise<string[]> {
-    if (!Array.isArray(ids) || ids.length === 0) return [];
+    if (!userId || !Array.isArray(ids) || ids.length === 0) return [];
     const unique = [
       ...new Set(
         ids.filter((id) => typeof id === 'string' && UUID_REGEX.test(id) && id !== selfId)

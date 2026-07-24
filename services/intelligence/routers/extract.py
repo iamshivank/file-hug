@@ -10,7 +10,9 @@ partial data was obtained.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import re
+import socket
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -56,6 +58,48 @@ def _first(*values: str | None) -> str | None:
         if v:
             return v
     return None
+
+
+def _is_safe_url(url: str) -> tuple[bool, str | None]:
+    """Validate URL scheme and resolve hostname to check for SSRF risks.
+
+    Returns (is_safe, error_message). Only http/https schemes are allowed.
+    Private, loopback, link-local, multicast, and metadata service IPs are rejected.
+    """
+    parsed = urlparse(url)
+    scheme = parsed.scheme.lower() if parsed.scheme else ""
+
+    if scheme not in ("http", "https"):
+        return False, f"Unsupported scheme: {scheme or '(none)'}"
+
+    hostname = parsed.hostname
+    if not hostname:
+        return False, "Missing hostname"
+
+    # Resolve hostname to IP address(es) and check each one.
+    try:
+        addr_info = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+    except (socket.gaierror, socket.error) as exc:
+        return False, f"DNS resolution failed: {exc}"
+
+    for family, _, _, _, sockaddr in addr_info:
+        ip_str = sockaddr[0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            continue  # skip malformed addresses
+
+        # Reject private, loopback, link-local, multicast, and reserved addresses.
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
+            return False, f"Blocked private/internal IP: {ip}"
+
+        # Explicitly block cloud metadata service ranges (AWS, GCP, Azure, etc.).
+        # AWS/GCP/DigitalOcean: 169.254.169.254
+        # Azure: 168.63.129.16
+        if str(ip) in ("169.254.169.254", "168.63.129.16"):
+            return False, f"Blocked metadata service IP: {ip}"
+
+    return True, None
 
 
 def _extract_youtube_id(url: str) -> str | None:
@@ -156,15 +200,47 @@ async def extract(
     if not url:
         return ExtractResponse(url=url, error="Empty URL")
 
+    # Validate URL safety (SSRF protection).
+    is_safe, safety_error = _is_safe_url(url)
+    if not is_safe:
+        return ExtractResponse(url=url, error=f"Unsafe URL: {safety_error}")
+
     try:
         async with httpx.AsyncClient(
             timeout=_FETCH_TIMEOUT,
-            follow_redirects=True,
+            follow_redirects=False,  # disable automatic redirects for manual validation
             headers={"User-Agent": _USER_AGENT},
         ) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-            result = _parse_html(url, resp.text)
+            # Manually follow redirects with safety checks.
+            current_url = url
+            max_redirects = 5
+            for _ in range(max_redirects + 1):
+                resp = await client.get(current_url)
+
+                # If not a redirect, process the response.
+                if resp.status_code not in (301, 302, 303, 307, 308):
+                    resp.raise_for_status()
+                    result = _parse_html(current_url, resp.text)
+                    break
+
+                # Handle redirect: validate the target before following.
+                redirect_url = resp.headers.get("location")
+                if not redirect_url:
+                    raise ValueError("Redirect response missing Location header")
+
+                # Resolve relative redirect URLs.
+                redirect_url = urljoin(current_url, redirect_url)
+
+                # Validate the redirect target for SSRF.
+                is_safe, safety_error = _is_safe_url(redirect_url)
+                if not is_safe:
+                    return ExtractResponse(url=url, error=f"Unsafe redirect: {safety_error}")
+
+                current_url = redirect_url
+            else:
+                # Too many redirects.
+                return ExtractResponse(url=url, error="Too many redirects")
+
     except Exception as exc:  # network error, timeout, non-2xx, parse error
         # Never 500 on a fetch failure — return partial data with an error note.
         result = ExtractResponse(url=url, error=f"Fetch failed: {exc}")

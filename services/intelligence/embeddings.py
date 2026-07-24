@@ -117,6 +117,9 @@ def get_embedder(settings: Settings | None = None) -> Embedder:
 
     Uses :class:`OpenAIEmbedder` when ``OPENAI_API_KEY`` is set, otherwise the
     :class:`HashingEmbedder` sized to ``EMBED_DIM``. The instance is cached.
+
+    Validates that the selected embedder dimension matches the configured ``EMBED_DIM``
+    to prevent dimension mismatches with the database schema.
     """
     global _embedder_singleton
     if _embedder_singleton is not None:
@@ -125,7 +128,15 @@ def get_embedder(settings: Settings | None = None) -> Embedder:
     settings = settings or get_settings()
 
     if settings.OPENAI_API_KEY:
-        _embedder_singleton = OpenAIEmbedder(api_key=settings.OPENAI_API_KEY)
+        embedder = OpenAIEmbedder(api_key=settings.OPENAI_API_KEY)
+        if embedder.dim != settings.EMBED_DIM:
+            raise ValueError(
+                f"OpenAIEmbedder dimension ({embedder.dim}) does not match "
+                f"EMBED_DIM configuration ({settings.EMBED_DIM}). "
+                f"Update EMBED_DIM={embedder.dim} in your environment and run "
+                f"migration 002_update_vector_dimension.sql to alter the database schema."
+            )
+        _embedder_singleton = embedder
     else:
         _embedder_singleton = HashingEmbedder(dim=settings.EMBED_DIM)
 

@@ -96,10 +96,10 @@ async def search(
         except Exception:
             ilike_rows = []
         ranked_lists["ilike"] = [r["id"] for r in ilike_rows]
-    elif "semantic" in ranked_lists and semantic_available and "fts" in ranked_lists:
+    elif "semantic" in ranked_lists and "fts" in ranked_lists:
         mode = "hybrid"
     elif "semantic" in ranked_lists:
-        mode = "hybrid" if semantic_available else "fts"
+        mode = "semantic"
     else:
         mode = "fts"
 
