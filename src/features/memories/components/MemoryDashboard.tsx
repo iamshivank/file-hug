@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Loader2, LayoutGrid } from 'lucide-react';
+import { Loader2, LayoutGrid, Link2, NotebookPen, Network } from 'lucide-react';
 import { useMemories } from '../hooks/useMemories';
 import { MemoryData } from '../types/memory.types';
 import { filterMemories } from '../utils/search';
@@ -13,6 +13,7 @@ import LinkPreview from './LinkPreview';
 import NotePreview from './NotePreview';
 import SearchBar from './SearchBar';
 import PlatformGroup from './PlatformGroup';
+import MemoryCanvasBackdrop from './MemoryCanvasBackdrop';
 
 type Filter = 'all' | 'links' | 'notes';
 
@@ -22,12 +23,14 @@ export default function MemoryDashboard() {
   const [query, setQuery] = useState('');
   const [grouped, setGrouped] = useState(false);
   // The clicked card's rect travels with the open request so previews can flip
-  // open from where the user clicked.
-  const [preview, setPreview] = useState<{ memory: MemoryData; rect: DOMRect | null } | null>(null);
+  // open from where the user clicked. Previews resolve their memory by id so
+  // they reflect edits live as `memories` updates.
+  const [preview, setPreview] = useState<{ id: string; rect: DOMRect | null } | null>(null);
   const [activeNote, setActiveNote] = useState<{ id: string; edit: boolean; rect: DOMRect | null } | null>(null);
 
   const links = memories.filter((m) => m.type === 'url');
   const notes = memories.filter((m) => m.type === 'note');
+  const connectedCount = memories.filter((m) => (m.linkedMemoryIds?.length ?? 0) > 0).length;
 
   // Global search applies first, across the whole library (composes with tabs).
   const searched = useMemo(() => filterMemories(memories, query), [memories, query]);
@@ -39,30 +42,40 @@ export default function MemoryDashboard() {
   // Platform groups (links only) for the grouped view, after global search.
   const platformGroups = useMemo(() => groupByPlatform(searchedLinks), [searchedLinks]);
 
-  const linksById = new Map(links.map((l) => [l.id, l]));
-  const connectedLinksFor = (memory: MemoryData): MemoryData[] =>
+  const memoriesById = new Map(memories.map((m) => [m.id, m]));
+  // Every memory's connections, resolved to real memories (undirected graph).
+  const connectedFor = (memory: MemoryData): MemoryData[] =>
     (memory.linkedMemoryIds ?? [])
-      .map((id) => linksById.get(id))
-      .filter((l): l is MemoryData => !!l);
+      .map((id) => memoriesById.get(id))
+      .filter((m): m is MemoryData => !!m);
+  const connectedLinksFor = (memory: MemoryData) => connectedFor(memory).filter((m) => m.type === 'url');
+  const connectedNotesFor = (memory: MemoryData) => connectedFor(memory).filter((m) => m.type === 'note');
 
-  // Resolve by id so the open note reflects edits as `memories` updates.
-  const activeNoteMemory = activeNote
-    ? memories.find((m) => m.id === activeNote.id) ?? null
-    : null;
+  // Resolve by id so open previews reflect edits as `memories` updates.
+  const activeNoteMemory = activeNote ? memoriesById.get(activeNote.id) ?? null : null;
+  const previewMemory = preview ? memoriesById.get(preview.id) ?? null : null;
 
   const openMemory = (memory: MemoryData, rect: DOMRect) => {
     if (memory.type === 'url') {
-      setPreview({ memory, rect });
+      setPreview({ id: memory.id, rect });
     } else {
       setActiveNote({ id: memory.id, edit: false, rect });
     }
   };
 
-  const openLinkFromNote = (link: MemoryData) => {
-    setActiveNote(null);
-    // Opened from inside the note modal — no card rect, so it fades in gently.
-    setPreview({ memory: link, rect: null });
+  // A connected memory can be a link or a note — route to the right preview.
+  const openConnected = (item: MemoryData, rect: DOMRect | null) => {
+    if (item.type === 'url') {
+      setActiveNote(null);
+      setPreview({ id: item.id, rect });
+    } else {
+      setPreview(null);
+      setActiveNote({ id: item.id, edit: false, rect });
+    }
   };
+
+  const openLinkFromNote = (link: MemoryData) => openConnected(link, null);
+  const openNoteFromLink = (note: MemoryData) => openConnected(note, null);
 
   const filterTabs: { key: Filter; label: string; count: number }[] = [
     { key: 'all', label: 'All', count: memories.length },
@@ -98,7 +111,9 @@ export default function MemoryDashboard() {
       </div>
 
       {/* Library */}
-      <section>
+      <section className="library-shell">
+        <MemoryCanvasBackdrop />
+        <div className="library-content">
         <div className="flex items-center justify-between gap-4 mb-5 flex-wrap">
           <h2 className="font-display text-2xl text-foreground">Library</h2>
 
@@ -141,7 +156,28 @@ export default function MemoryDashboard() {
 
         {/* Global search — narrows the whole library before tabs/grouping. */}
         {memories.length > 0 && (
-          <div className="mb-6">
+          <div className="mb-6 space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="library-stat">
+                <span className="library-stat-label">Saved</span>
+                <strong>{memories.length}</strong>
+              </div>
+              <div className="library-stat">
+                <Link2 className="w-3.5 h-3.5 text-primary-light" />
+                <span className="library-stat-label">Links</span>
+                <strong>{links.length}</strong>
+              </div>
+              <div className="library-stat">
+                <NotebookPen className="w-3.5 h-3.5 text-primary-light" />
+                <span className="library-stat-label">Notes</span>
+                <strong>{notes.length}</strong>
+              </div>
+              <div className="library-stat">
+                <Network className="w-3.5 h-3.5 text-primary-light" />
+                <span className="library-stat-label">Connected</span>
+                <strong>{connectedCount}</strong>
+              </div>
+            </div>
             <SearchBar
               value={query}
               onChange={setQuery}
@@ -180,8 +216,8 @@ export default function MemoryDashboard() {
                     memories={group.memories}
                     onOpen={openMemory}
                     onEdit={(m) => setActiveNote({ id: m.id, edit: true, rect: null })}
-                    connectedLinksFor={connectedLinksFor}
-                    onOpenConnected={(link, rect) => setPreview({ memory: link, rect })}
+                    connectedFor={connectedFor}
+                    onOpenConnected={openConnected}
                   />
                 ))}
               {showNotesGroup && (
@@ -191,8 +227,8 @@ export default function MemoryDashboard() {
                   memories={searchedNotes}
                   onOpen={openMemory}
                   onEdit={(m) => setActiveNote({ id: m.id, edit: true, rect: null })}
-                  connectedLinksFor={connectedLinksFor}
-                  onOpenConnected={(link, rect) => setPreview({ memory: link, rect })}
+                  connectedFor={connectedFor}
+                  onOpenConnected={openConnected}
                 />
               )}
             </div>
@@ -208,29 +244,36 @@ export default function MemoryDashboard() {
           </p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {flatList.map((memory) => (
+            {flatList.map((memory, index) => (
               <MemoryCard
                 key={memory.id}
                 memory={memory}
+                index={index}
                 onOpen={(rect) => openMemory(memory, rect)}
                 onEdit={
                   memory.type === 'note'
                     ? () => setActiveNote({ id: memory.id, edit: true, rect: null })
                     : undefined
                 }
-                connectedLinks={memory.type === 'note' ? connectedLinksFor(memory) : undefined}
-                onOpenConnected={(link, rect) => setPreview({ memory: link, rect })}
+                connected={connectedFor(memory)}
+                onOpenConnected={openConnected}
               />
             ))}
           </div>
         )}
+        </div>
       </section>
 
-      {preview && (
+      {previewMemory && (
         <LinkPreview
-          memory={preview.memory}
-          originRect={preview.rect}
+          key={previewMemory.id}
+          memory={previewMemory}
+          originRect={preview?.rect ?? null}
+          connectedNotes={connectedNotesFor(previewMemory)}
+          savedNotes={notes}
           onClose={() => setPreview(null)}
+          onOpenNote={openNoteFromLink}
+          onSave={update}
         />
       )}
       {activeNoteMemory && (

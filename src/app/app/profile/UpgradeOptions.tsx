@@ -236,7 +236,7 @@ export default function UpgradeOptions({
                 type="button"
                 onClick={() => startCheckout(plan)}
                 disabled={isBusy || status === 'success'}
-                className="group mt-auto inline-flex items-center justify-center gap-2 w-full px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-light text-background font-semibold transition-all duration-300 shadow-lg shadow-primary/20 hover:shadow-primary/35 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+                className="group mt-auto inline-flex items-center justify-center gap-2 w-full px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-light text-on-accent font-semibold transition-all duration-300 shadow-lg shadow-primary/20 hover:shadow-primary/35 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
               >
                 {isBusy ? (
                   <>

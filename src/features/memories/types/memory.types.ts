@@ -4,7 +4,7 @@ export interface MemoryData {
   type: 'url' | 'note';
   title: string;
   tags: string[];
-  /** Ids of saved link memories this note is connected to. */
+  /** Ids of other memories (links or notes) this memory is connected to — bidirectional. */
   linkedMemoryIds?: string[];
   createdAt: string | Date;
   updatedAt?: string | Date;
@@ -17,7 +17,7 @@ export interface SaveMemoryInput {
   title?: string;
   /** Explicit mode from the UI. When omitted the service auto-detects. */
   type?: 'url' | 'note';
-  /** Saved link memories to connect this note to — note mode only. */
+  /** Other memories (links or notes) to connect this one to. */
   linkedMemoryIds?: string[];
 }
 
@@ -28,7 +28,7 @@ export interface UpdateMemoryInput {
   title?: string;
   /** New body/content — only applied when provided. */
   content?: string;
-  /** Full replacement set of connected link ids — note mode only. */
+  /** Full replacement set of connected memory ids (links or notes) — bidirectional. */
   linkedMemoryIds?: string[];
 }
 

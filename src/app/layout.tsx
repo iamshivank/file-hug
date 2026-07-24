@@ -57,7 +57,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${fraunces.variable} h-full antialiased overflow-x-hidden`}>
+    <html lang="en" className={`${inter.variable} ${fraunces.variable} h-full antialiased overflow-x-hidden`} suppressHydrationWarning>
+      <head>
+        {/* Apply a saved theme choice before first paint to avoid a flash. When
+            no explicit choice is stored we leave [data-theme] unset so the
+            prefers-color-scheme media query follows the OS. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var t=localStorage.getItem('fh-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();",
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col overflow-x-hidden">
         {children}
         <Analytics />

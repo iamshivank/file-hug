@@ -4,6 +4,7 @@ import { Heart, ArrowLeft } from 'lucide-react';
 import { getSession } from '@/features/auth/session';
 import { AuthProvider } from '@/features/auth/AuthProvider';
 import UserMenu from '@/features/auth/UserMenu';
+import ThemeToggle from '@/features/theme/ThemeToggle';
 
 const IS_DEMO = process.env.NEXT_PUBLIC_IS_DEMO_MODE === 'true';
 
@@ -22,7 +23,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <div className="max-w-4xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
-                <Heart className="w-3.5 h-3.5 text-background fill-background" />
+                <Heart className="w-3.5 h-3.5 text-on-accent fill-on-accent" />
               </div>
               <span className="font-display text-lg text-foreground">File Hug</span>
               {showDemoBadge && (
@@ -40,6 +41,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 <ArrowLeft className="w-4 h-4" />
                 Back to site
               </Link>
+              <ThemeToggle />
               <UserMenu />
             </div>
           </div>

@@ -120,7 +120,7 @@ export default function CredentialsForm() {
       <button
         type="submit"
         disabled={status === 'loading'}
-        className="inline-flex w-full items-center justify-center gap-2 px-5 py-3 bg-primary hover:bg-primary/90 disabled:opacity-60 rounded-xl text-background font-medium transition-colors"
+        className="inline-flex w-full items-center justify-center gap-2 px-5 py-3 bg-primary hover:bg-primary/90 disabled:opacity-60 rounded-xl text-on-accent font-medium transition-colors"
       >
         {status === 'loading' && <Loader2 className="w-4 h-4 animate-spin" />}
         {mode === 'signup' ? 'Create account' : 'Sign in'}

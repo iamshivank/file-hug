@@ -55,10 +55,16 @@ function applyLocalUpdate(memory: MemoryData, input: UpdateMemoryInput): MemoryD
   if (input.title !== undefined) {
     next.title = input.title.trim() || noteTitleFrom(next.content);
   }
-  if (input.linkedMemoryIds !== undefined && memory.type === 'note') {
+  // Connections are bidirectional and apply to both notes and links.
+  if (input.linkedMemoryIds !== undefined) {
     next.linkedMemoryIds = input.linkedMemoryIds;
   }
   return next;
+}
+
+/** Add `otherId` to a memory's connections without duplicates (demo mirroring). */
+function withConnection(memory: MemoryData, otherId: string): MemoryData {
+  return { ...memory, linkedMemoryIds: [...new Set([...(memory.linkedMemoryIds ?? []), otherId])] };
 }
 
 export function useMemories() {
@@ -97,13 +103,24 @@ export function useMemories() {
   }, [fetchMemories]);
 
   const save = useCallback(async (input: SaveMemoryInput): Promise<boolean> => {
-    if (!input.content.trim()) return false;
+    // Notes may be title-only (empty body); links always need content.
+    const hasContent = !!input.content.trim();
+    if (input.type === 'note') {
+      if (!hasContent && !input.title?.trim()) return false;
+    } else if (!hasContent) {
+      return false;
+    }
     setIsSaving(true);
     setError(null);
 
     if (IS_DEMO) {
       const newMemory = buildLocalMemory(input);
-      setMemories((prev) => [newMemory, ...prev]);
+      const links = newMemory.linkedMemoryIds ?? [];
+      setMemories((prev) => [
+        newMemory,
+        // Mirror the new memory's connections onto its targets.
+        ...prev.map((m) => (links.includes(m.id) ? withConnection(m, newMemory.id) : m)),
+      ]);
       setIsSaving(false);
       return true;
     }
@@ -135,9 +152,23 @@ export function useMemories() {
     setError(null);
 
     if (IS_DEMO) {
-      setMemories((prev) =>
-        prev.map((m) => (m.id === input.id ? applyLocalUpdate(m, input) : m))
-      );
+      setMemories((prev) => {
+        const target = prev.find((m) => m.id === input.id);
+        if (!target) return prev;
+        const updated = applyLocalUpdate(target, input);
+        const prevLinks = target.linkedMemoryIds ?? [];
+        const nextLinks = updated.linkedMemoryIds ?? [];
+        const added = nextLinks.filter((id) => !prevLinks.includes(id));
+        const removed = prevLinks.filter((id) => !nextLinks.includes(id));
+        return prev.map((m) => {
+          if (m.id === updated.id) return updated;
+          if (added.includes(m.id)) return withConnection(m, updated.id);
+          if (removed.includes(m.id)) {
+            return { ...m, linkedMemoryIds: (m.linkedMemoryIds ?? []).filter((x) => x !== updated.id) };
+          }
+          return m;
+        });
+      });
       return true;
     }
 

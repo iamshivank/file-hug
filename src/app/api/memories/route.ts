@@ -45,8 +45,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
 export async function PATCH(request: NextRequest): Promise<NextResponse> {
   try {
+    const userId = await currentUserId();
     const body = await request.json();
-    const result = await memoryService.update(body);
+    const result = await memoryService.update(body, userId);
 
     if (!result.success) {
       return NextResponse.json(result, { status: 400 });

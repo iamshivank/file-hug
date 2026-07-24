@@ -17,7 +17,7 @@ export default function Footer() {
           <div>
             <div className="flex items-center gap-2.5 mb-4">
               <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
-                <Heart className="w-4 h-4 text-background fill-background" />
+                <Heart className="w-4 h-4 text-on-accent fill-on-accent" />
               </div>
               <span className="font-display text-xl text-foreground">File Hug</span>
             </div>

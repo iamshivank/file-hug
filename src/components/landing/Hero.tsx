@@ -107,7 +107,7 @@ export default function Hero() {
           <div className="flex flex-col sm:flex-row gap-3">
             <button
               onClick={scrollToWaitlist}
-              className="group inline-flex items-center justify-center gap-2 px-7 py-3.5 bg-primary hover:bg-primary-light text-background font-semibold rounded-xl transition-all duration-300 shadow-lg shadow-primary/20 hover:shadow-primary/35 cursor-pointer"
+              className="group inline-flex items-center justify-center gap-2 px-7 py-3.5 bg-primary hover:bg-primary-light text-on-accent font-semibold rounded-xl transition-all duration-300 shadow-lg shadow-primary/20 hover:shadow-primary/35 cursor-pointer"
             >
               Join the waitlist
               <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />

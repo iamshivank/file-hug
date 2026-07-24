@@ -1,6 +1,6 @@
 'use client';
 
-import { Clock, Pencil } from 'lucide-react';
+import { Clock, Pencil, FileText } from 'lucide-react';
 import { MemoryData } from '../types/memory.types';
 import PlatformIcon from './PlatformIcon';
 
@@ -19,21 +19,24 @@ function timeAgo(dateInput: string | Date): string {
 
 interface MemoryCardProps {
   memory: MemoryData;
+  /** Used only to stagger the visual entrance of a grid. */
+  index?: number;
   /** Opens the preview/popup for this card, anchored to its on-screen rect. */
   onOpen?: (rect: DOMRect) => void;
   /** Opens this card straight into edit mode — only passed for notes. */
   onEdit?: () => void;
-  /** Resolved link memories this note is connected to. */
-  connectedLinks?: MemoryData[];
-  /** Opens the PiP preview for a connected link, anchored to the clicked row. */
-  onOpenConnected?: (link: MemoryData, rect: DOMRect) => void;
+  /** Memories connected to this one (links for a note, notes for a link). */
+  connected?: MemoryData[];
+  /** Opens the connected memory's preview, anchored to the clicked row. */
+  onOpenConnected?: (item: MemoryData, rect: DOMRect) => void;
 }
 
 export default function MemoryCard({
   memory,
+  index = 0,
   onOpen,
   onEdit,
-  connectedLinks = [],
+  connected = [],
   onOpenConnected,
 }: MemoryCardProps) {
   const isUrl = memory.type === 'url';
@@ -50,11 +53,30 @@ export default function MemoryCard({
     onOpen?.(el.getBoundingClientRect());
   };
 
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'mouse' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const card = event.currentTarget;
+    const rect = card.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width;
+    const y = (event.clientY - rect.top) / rect.height;
+    card.style.setProperty('--card-rotate-x', `${(0.5 - y) * 5}deg`);
+    card.style.setProperty('--card-rotate-y', `${(x - 0.5) * 5}deg`);
+    card.style.setProperty('--card-glow-x', `${x * 100}%`);
+    card.style.setProperty('--card-glow-y', `${y * 100}%`);
+  };
+
+  const resetTilt = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.currentTarget.style.removeProperty('--card-rotate-x');
+    event.currentTarget.style.removeProperty('--card-rotate-y');
+  };
+
   return (
     <div
       role={onOpen ? 'button' : undefined}
       tabIndex={onOpen ? 0 : undefined}
       onClick={(e) => handleOpen(e.currentTarget)}
+      onPointerMove={handlePointerMove}
+      onPointerLeave={resetTilt}
       onKeyDown={
         onOpen
           ? (e) => {
@@ -65,7 +87,9 @@ export default function MemoryCard({
             }
           : undefined
       }
-      className={`card p-5 hover:border-border-strong hover:bg-surface-hover transition-all duration-300 hover:-translate-y-0.5 group flex flex-col gap-3 ${
+      data-memory-type={memory.type}
+      style={{ '--card-index': index } as React.CSSProperties}
+      className={`card memory-card p-5 group flex flex-col gap-3 ${
         onOpen ? 'cursor-pointer' : ''
       }`}
     >
@@ -110,25 +134,29 @@ export default function MemoryCard({
         {memory.content}
       </p>
 
-      {/* Connected links — saved URLs this note points to */}
-      {connectedLinks.length > 0 && (
+      {/* Connected memories — links this note points to, or notes on this link */}
+      {connected.length > 0 && (
         <div className="flex flex-col gap-1.5 pt-1 border-t border-border">
-          {connectedLinks.map((link) => (
+          {connected.map((item) => (
             <button
-              key={link.id}
+              key={item.id}
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onOpenConnected?.(link, e.currentTarget.getBoundingClientRect());
+                onOpenConnected?.(item, e.currentTarget.getBoundingClientRect());
               }}
               className="inline-flex items-center gap-2 px-2 py-1.5 -mx-1 rounded-lg text-left text-xs text-primary-light hover:bg-surface-hover transition-colors cursor-pointer min-w-0"
             >
-              <PlatformIcon
-                platform={link.tags.length > 0 ? link.tags[0] : null}
-                type="url"
-                className="w-3.5 h-3.5 shrink-0"
-              />
-              <span className="truncate">{link.title}</span>
+              {item.type === 'note' ? (
+                <FileText className="w-3.5 h-3.5 shrink-0" />
+              ) : (
+                <PlatformIcon
+                  platform={item.tags.length > 0 ? item.tags[0] : null}
+                  type="url"
+                  className="w-3.5 h-3.5 shrink-0"
+                />
+              )}
+              <span className="truncate">{item.title}</span>
             </button>
           ))}
         </div>
