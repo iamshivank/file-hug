@@ -18,10 +18,10 @@ interface PlatformGroupProps {
   onOpen: (memory: MemoryData, rect: DOMRect) => void;
   /** Opens a note straight into edit mode (notes only). */
   onEdit: (memory: MemoryData) => void;
-  /** Resolves the link memories a note points to. */
-  connectedLinksFor: (memory: MemoryData) => MemoryData[];
-  /** Opens a connected link's preview from a card. */
-  onOpenConnected: (link: MemoryData, rect: DOMRect) => void;
+  /** Resolves the memories a card is connected to (links for notes, notes for links). */
+  connectedFor: (memory: MemoryData) => MemoryData[];
+  /** Opens a connected memory's preview from a card. */
+  onOpenConnected: (item: MemoryData, rect: DOMRect) => void;
 }
 
 /**
@@ -35,7 +35,7 @@ export default function PlatformGroup({
   memories,
   onOpen,
   onEdit,
-  connectedLinksFor,
+  connectedFor,
   onOpenConnected,
 }: PlatformGroupProps) {
   const [query, setQuery] = useState('');
@@ -76,13 +76,14 @@ export default function PlatformGroup({
         </p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {visible.map((memory) => (
+          {visible.map((memory, index) => (
             <MemoryCard
               key={memory.id}
               memory={memory}
+              index={index}
               onOpen={(rect) => onOpen(memory, rect)}
               onEdit={isNotes ? () => onEdit(memory) : undefined}
-              connectedLinks={isNotes ? connectedLinksFor(memory) : undefined}
+              connected={connectedFor(memory)}
               onOpenConnected={onOpenConnected}
             />
           ))}

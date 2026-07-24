@@ -84,7 +84,7 @@ export default function Pricing() {
               >
                 <div className={`relative flex flex-col h-full ${cardClasses}`}>
                   {highlighted && (
-                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary text-background text-xs font-semibold shadow-lg shadow-primary/25">
+                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary text-on-accent text-xs font-semibold shadow-lg shadow-primary/25">
                       <Sparkles className="w-3.5 h-3.5" />
                       Most popular
                     </span>
@@ -133,7 +133,7 @@ export default function Pricing() {
                     href={ctaHref(plan)}
                     className={`group inline-flex items-center justify-center gap-2 w-full px-6 py-3 rounded-xl font-semibold transition-all duration-300 cursor-pointer ${
                       highlighted
-                        ? 'bg-primary hover:bg-primary-light text-background shadow-lg shadow-primary/20 hover:shadow-primary/35'
+                        ? 'bg-primary hover:bg-primary-light text-on-accent shadow-lg shadow-primary/20 hover:shadow-primary/35'
                         : 'bg-surface hover:bg-surface-hover text-foreground border border-border hover:border-border-strong'
                     }`}
                   >

@@ -96,7 +96,7 @@ export default function HowItWorks() {
                     <div className="w-14 h-14 rounded-2xl bg-surface border border-border flex items-center justify-center">
                       <Icon className="w-6 h-6 text-primary-light" />
                     </div>
-                    <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-primary text-background text-xs font-bold flex items-center justify-center font-mono">
+                    <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-primary text-on-accent text-xs font-bold flex items-center justify-center font-mono">
                       {index + 1}
                     </span>
                   </div>

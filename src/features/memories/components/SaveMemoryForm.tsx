@@ -13,7 +13,7 @@ import {
 import { SaveMemoryInput, MemoryData } from '../types/memory.types';
 import { detectContent } from '../utils/urlDetection';
 import PlatformIcon from './PlatformIcon';
-import ConnectLinksField from './ConnectLinksField';
+import ConnectMemoriesField from './ConnectMemoriesField';
 
 interface SaveMemoryFormProps {
   onSave: (input: SaveMemoryInput) => Promise<boolean>;
@@ -46,7 +46,8 @@ export default function SaveMemoryForm({ onSave, isSaving, savedLinks }: SaveMem
 
   const detection = mode === 'link' && url.trim() ? detectContent(url) : null;
   const isNoteLike = detection?.type === 'note';
-  const canSave = mode === 'link' ? !!url.trim() : !!noteBody.trim();
+  // A note is saveable with just a title, just a body, or both — no field is required on its own.
+  const canSave = mode === 'link' ? !!url.trim() : !!(noteTitle.trim() || noteBody.trim());
 
   const flashSaved = () => {
     setJustSaved(true);
@@ -111,7 +112,7 @@ export default function SaveMemoryForm({ onSave, isSaving, savedLinks }: SaveMem
 
   const tabClass = (active: boolean) =>
     `inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-all cursor-pointer ${
-      active ? 'bg-primary text-background shadow-sm shadow-primary/30' : 'text-muted hover:text-foreground'
+      active ? 'bg-primary text-on-accent shadow-sm shadow-primary/30' : 'text-muted hover:text-foreground'
     }`;
 
   const sendButton = (
@@ -119,7 +120,7 @@ export default function SaveMemoryForm({ onSave, isSaving, savedLinks }: SaveMem
       type="submit"
       disabled={isSaving || !canSave}
       aria-label="Save"
-      className="w-10 h-10 rounded-full bg-primary hover:bg-primary-light text-background flex items-center justify-center transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed shrink-0 cursor-pointer"
+      className="w-10 h-10 rounded-full bg-primary hover:bg-primary-light text-on-accent flex items-center justify-center transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed shrink-0 cursor-pointer"
     >
       {isSaving ? (
         <Loader2 className="w-4 h-4 animate-spin" />
@@ -202,10 +203,11 @@ export default function SaveMemoryForm({ onSave, isSaving, savedLinks }: SaveMem
 
           {/* Connect saved links to this note */}
           <div className="px-3 pt-1 pb-1.5">
-            <ConnectLinksField
-              savedLinks={savedLinks}
+            <ConnectMemoriesField
+              candidates={savedLinks}
               selectedIds={linkedIds}
               onToggle={toggleLinked}
+              noun="link"
             />
           </div>
 
@@ -214,7 +216,7 @@ export default function SaveMemoryForm({ onSave, isSaving, savedLinks }: SaveMem
             <button
               type="submit"
               disabled={isSaving || !canSave}
-              className="group inline-flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-light text-background text-sm font-semibold rounded-full transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              className="group inline-flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-light text-on-accent text-sm font-semibold rounded-full transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               {isSaving ? (
                 <>

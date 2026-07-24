@@ -1,7 +1,11 @@
 @import "tailwindcss";
 
-/* ===== Design Tokens — "Ember" (warm dark + vibrant orange) ===== */
+/* ===== Design Tokens — "Ember" (warm dark + vibrant orange) =====
+   Dark is the default palette. Theming is follow-system: when the visitor has
+   no explicit choice, the prefers-color-scheme media query picks light/dark;
+   a manual toggle stamps [data-theme] on <html>, which always wins. */
 :root {
+  color-scheme: dark;
   --background: #0c0a09;        /* warm near-black */
   --background-elev: #14100d;   /* slightly raised */
   --foreground: #ede8e0;        /* cream */
@@ -24,6 +28,68 @@
   --gradient-start: #ffb05c;
   --gradient-mid: #fb8b3d;
   --gradient-end: #f4734a;
+  /* Text/icons sitting on an accent-colored fill (buttons, badges, glyph
+     tiles). Stays a warm near-black in both themes so it always reads on orange. */
+  --on-accent: #1b1206;
+}
+
+/* ===== Light theme — "Ember Daylight" (warm paper + deep orange) =====
+   Applied both when forced (data-theme='light') and, below, when the OS prefers
+   light and the user hasn't made an explicit choice. */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --background: #faf6f0;        /* warm paper */
+  --background-elev: #ffffff;
+  --foreground: #241a12;        /* warm near-black ink */
+  --surface: #ffffff;
+  --surface-hover: #f4ece1;
+  --border: rgba(200, 96, 20, 0.16);
+  --border-strong: rgba(200, 96, 20, 0.36);
+  --primary: #d9631a;           /* deep orange — reads on light */
+  --primary-light: #b8500f;     /* darker so accent TEXT stays legible on light */
+  --primary-dark: #9c440a;
+  --accent: #d1502c;
+  --accent-light: #b8431f;
+  --success: #5f8b3f;
+  --danger: #c14634;
+  --muted: #8a7a68;
+  --muted-light: #6a5c4c;
+  --card-bg: #ffffff;
+  --card-border: rgba(200, 96, 20, 0.12);
+  --glow-amber: rgba(217, 99, 26, 0.16);
+  --gradient-start: #f0872f;
+  --gradient-mid: #d9631a;
+  --gradient-end: #cf4f2b;
+  --on-accent: #ffffff;         /* light contrasting text on accent backgrounds */
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --background: #faf6f0;
+    --background-elev: #ffffff;
+    --foreground: #241a12;
+    --surface: #ffffff;
+    --surface-hover: #f4ece1;
+    --border: rgba(200, 96, 20, 0.16);
+    --border-strong: rgba(200, 96, 20, 0.36);
+    --primary: #d9631a;
+    --primary-light: #b8500f;
+    --primary-dark: #9c440a;
+    --accent: #d1502c;
+    --accent-light: #b8431f;
+    --success: #5f8b3f;
+    --danger: #c14634;
+    --muted: #8a7a68;
+    --muted-light: #6a5c4c;
+    --card-bg: #ffffff;
+    --card-border: rgba(200, 96, 20, 0.12);
+    --glow-amber: rgba(217, 99, 26, 0.16);
+    --gradient-start: #f0872f;
+    --gradient-mid: #d9631a;
+    --gradient-end: #cf4f2b;
+    --on-accent: #ffffff;
+  }
 }
 
 @theme inline {
@@ -45,6 +111,7 @@
   --color-muted-light: var(--muted-light);
   --color-card-bg: var(--card-bg);
   --color-card-border: var(--card-border);
+  --color-on-accent: var(--on-accent);
   --font-sans: var(--font-inter);
   --font-display: var(--font-display);
   --font-mono: var(--font-mono);
@@ -173,6 +240,8 @@ body {
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Ease the palette swap when the theme toggle flips [data-theme]. */
+  transition: background-color 0.35s ease, color 0.35s ease;
 }
 
 /* Display serif for headings */
@@ -280,7 +349,8 @@ body {
 .composer {
   position: relative;
   border-radius: 26px;
-  background: rgba(20, 16, 13, 0.82);
+  /* Theme-aware surface — dark in Ember, light paper in daylight. */
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--border-strong);
@@ -339,6 +409,120 @@ body {
   padding: 6rem 1.5rem;
 }
 
+/* ===== Memory library: a shared Three.js field + tactile cards ===== */
+.library-shell {
+  position: relative;
+  isolation: isolate;
+}
+
+.library-content {
+  position: relative;
+  z-index: 1;
+}
+
+.memory-canvas {
+  position: absolute;
+  inset: -1.5rem -2rem -2rem;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: 1.5rem;
+  pointer-events: none;
+  mask-image: linear-gradient(to bottom, transparent, black 12%, black 88%, transparent);
+}
+
+.memory-canvas canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.library-stat {
+  min-height: 3.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.library-stat-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.library-stat strong {
+  margin-left: auto;
+  color: var(--foreground);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.memory-card {
+  --card-rotate-x: 0deg;
+  --card-rotate-y: 0deg;
+  --card-glow-x: 50%;
+  --card-glow-y: 45%;
+
+  position: relative;
+  overflow: hidden;
+  transform: perspective(900px) rotateX(var(--card-rotate-x)) rotateY(var(--card-rotate-y));
+  transform-style: preserve-3d;
+  transition: transform 220ms ease-out, border-color 220ms ease-out, background-color 220ms ease-out, box-shadow 220ms ease-out;
+  animation: memory-card-enter 480ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(min(var(--card-index), 8) * 42ms);
+}
+
+.memory-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(260px circle at var(--card-glow-x) var(--card-glow-y), rgba(255, 176, 92, 0.13), transparent 56%);
+  transition: opacity 220ms ease-out;
+}
+
+.memory-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.memory-card:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+  box-shadow: 0 18px 42px -28px rgba(251, 139, 61, 0.75);
+}
+
+.memory-card:hover::before {
+  opacity: 1;
+}
+
+@keyframes memory-card-enter {
+  from {
+    opacity: 0;
+    transform: perspective(900px) translateY(14px) rotateX(-4deg);
+  }
+  to {
+    opacity: 1;
+    transform: perspective(900px) translateY(0) rotateX(0deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .memory-canvas {
+    display: none;
+  }
+
+  .memory-card {
+    animation: none;
+    transform: none;
+    transition: border-color 160ms ease, background-color 160ms ease;
+  }
+}
+
 @media (min-width: 768px) {
   .section-padding {
     padding: 8rem 2rem;
@@ -349,4 +533,50 @@ body {
   .section-padding {
     padding: 9rem 2rem;
   }
+}
+
+/* ===== Note sheet — the "opened card" gets an editorial, tactile treatment ===== */
+.note-sheet {
+  position: relative;
+  /* Warm surface with a faint diagonal ember wash in the top-left corner. */
+  background:
+    radial-gradient(130% 90% at 0% 0%, color-mix(in srgb, var(--primary) 9%, transparent), transparent 58%),
+    color-mix(in srgb, var(--surface) 96%, transparent);
+  backdrop-filter: blur(18px) saturate(1.05);
+  -webkit-backdrop-filter: blur(18px) saturate(1.05);
+}
+
+/* Signature gradient hairline pinned to the very top edge of the sheet. */
+.note-sheet-accent {
+  height: 3px;
+  width: 100%;
+  flex-shrink: 0;
+  background: linear-gradient(90deg, var(--gradient-start), var(--gradient-mid) 50%, var(--gradient-end));
+}
+
+/* Bold gradient glyph tile in the header — replaces the flat icon chip. */
+.note-glyph {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--on-accent);
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  box-shadow: 0 8px 20px -8px var(--glow-amber);
+}
+
+/* Editorial body: a serif drop cap for longer notes gives the sheet character. */
+.note-prose {
+  font-size: 0.95rem;
+}
+
+.note-prose.has-dropcap::first-letter {
+  float: left;
+  font-family: var(--font-display), Georgia, "Times New Roman", serif;
+  font-size: 3rem;
+  line-height: 0.82;
+  padding: 0.16rem 0.55rem 0 0;
+  color: var(--primary);
 }

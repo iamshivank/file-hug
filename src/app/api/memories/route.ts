@@ -45,8 +45,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
 export async function PATCH(request: NextRequest): Promise<NextResponse> {
   try {
+    const userId = await currentUserId();
+    // Deny unauthenticated/demo requests explicitly rather than passing undefined.
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'Authentication required.' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
-    const result = await memoryService.update(body);
+    const result = await memoryService.update(body, userId);
 
     if (!result.success) {
       return NextResponse.json(result, { status: 400 });
