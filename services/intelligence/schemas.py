@@ -16,12 +16,49 @@ class ExtractRequest(BaseModel):
 
 class ExtractResponse(BaseModel):
     url: str
+    final_url: str | None = Field(
+        default=None, description="Where the URL resolved to after redirects."
+    )
     title: str | None = None
     description: str | None = None
     image: str | None = None
     site_name: str | None = None
     favicon: str | None = None
+    author: str | None = None
+    keywords: list[str] = Field(default_factory=list)
+    text: str | None = Field(
+        default=None, description="The page's visible body text, truncated."
+    )
     transcript: str | None = None
+    error: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# /index
+# ---------------------------------------------------------------------------
+class IndexRequest(BaseModel):
+    memory_id: str = Field(..., description="Id of the link memory to index.")
+    force: bool = Field(
+        default=False,
+        description="Re-index even when a ready row already exists for this memory.",
+    )
+
+
+class IndexResponse(BaseModel):
+    memory_id: str
+    status: str = Field(description="'ready', 'failed', or 'skipped'.")
+    url: str | None = None
+    page_title: str | None = None
+    description: str | None = None
+    site_name: str | None = None
+    author: str | None = None
+    image_url: str | None = None
+    favicon_url: str | None = None
+    keywords: list[str] = Field(default_factory=list)
+    has_transcript: bool = False
+    #: Length of the indexed text — a cheap way for callers to see how much
+    #: searchable content the page yielded.
+    indexed_chars: int = 0
     error: str | None = None
 
 
@@ -38,14 +75,27 @@ class SearchResult(BaseModel):
     score: float
     matched: list[str] = Field(
         default_factory=list,
-        description="Which signals matched, e.g. ['fts', 'semantic', 'ilike'].",
+        description=(
+            "Which signals ranked this result: 'fts'/'semantic' over the saved "
+            "title+content, 'index_fts'/'index_semantic' over the extracted page "
+            "content, or 'ilike' from the substring fallback."
+        ),
     )
+    #: A short excerpt of the extracted page content, when the link was indexed.
+    snippet: str | None = None
 
 
 class SearchResponse(BaseModel):
     query: str
     count: int
-    mode: str = Field(description="Effective search mode: 'hybrid' (FTS+semantic), 'semantic' (semantic-only), 'fts', or 'ilike'.")
+    mode: str = Field(
+        description=(
+            "Effective search mode: 'hybrid' (two or more signals), 'semantic', "
+            "'fts', or 'ilike'."
+        )
+    )
+    #: True when at least one signal came from the extracted link index.
+    used_link_index: bool = False
     results: list[SearchResult] = Field(default_factory=list)
 
 

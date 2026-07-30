@@ -39,6 +39,22 @@ export interface Session {
   user: SessionUser;
 }
 
+/**
+ * What actually gets signed into the cookie: the user plus an expiry.
+ *
+ * `exp` is seconds since the epoch. It is **required** — the Python intelligence
+ * service (`services/intelligence/auth.py`) verifies the very same token and
+ * rejects any payload without a live `exp`, so a token that omits it would
+ * authenticate here and 401 there.
+ */
+interface SessionPayload extends SessionUser {
+  exp: number;
+}
+
+function nowSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
 function base64url(input: Buffer | string): string {
   return Buffer.from(input)
     .toString('base64')
@@ -58,12 +74,13 @@ function hmac(payloadB64: string): string {
 
 /** Sign a session payload into a `<payload>.<signature>` token. */
 export function signPayload(user: SessionUser): string {
-  const payloadB64 = base64url(JSON.stringify(user));
+  const payload: SessionPayload = { ...user, exp: nowSeconds() + MAX_AGE_SECONDS };
+  const payloadB64 = base64url(JSON.stringify(payload));
   const signature = hmac(payloadB64);
   return `${payloadB64}.${signature}`;
 }
 
-/** Verify a token's HMAC and return the parsed user, or null when invalid. */
+/** Verify a token's HMAC and expiry, returning the parsed user or null. */
 export function verifyToken(token: string | undefined | null): SessionUser | null {
   if (!token) return null;
   const parts = token.split('.');
@@ -78,13 +95,19 @@ export function verifyToken(token: string | undefined | null): SessionUser | nul
   }
 
   try {
-    const parsed = JSON.parse(fromBase64url(payloadB64).toString('utf8')) as Partial<SessionUser>;
+    const parsed = JSON.parse(fromBase64url(payloadB64).toString('utf8')) as Partial<SessionPayload>;
     if (
       typeof parsed.id !== 'string' ||
       typeof parsed.name !== 'string' ||
       typeof parsed.email !== 'string' ||
       typeof parsed.isDemo !== 'boolean'
     ) {
+      return null;
+    }
+    // Reject expired tokens, and tokens with no expiry at all — the intelligence
+    // service treats both as invalid, so accepting them here would produce a
+    // session that works in the app but is refused by search/indexing.
+    if (typeof parsed.exp !== 'number' || !Number.isFinite(parsed.exp) || parsed.exp <= nowSeconds()) {
       return null;
     }
     return {
@@ -105,6 +128,20 @@ export async function getSession(): Promise<Session | null> {
   const token = cookieStore.get(COOKIE_NAME)?.value;
   const user = verifyToken(token);
   return user ? { user } : null;
+}
+
+/**
+ * The raw session token, verified but not decoded.
+ *
+ * Server-side callers that need to talk to the intelligence service forward this
+ * as `Authorization: Bearer <token>` — that service verifies the same HMAC and
+ * derives the user itself, so no user id is ever passed across the wire.
+ */
+export async function getSessionToken(): Promise<string | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(COOKIE_NAME)?.value;
+  if (!token || !verifyToken(token)) return null;
+  return token;
 }
 
 /** Set the signed session cookie. Call only from route handlers / server actions. */

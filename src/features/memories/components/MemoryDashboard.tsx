@@ -1,10 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Loader2, LayoutGrid, Link2, NotebookPen, Network } from 'lucide-react';
+import { Loader2, LayoutGrid, Link2, NotebookPen, Network, Sparkles } from 'lucide-react';
 import { useMemories } from '../hooks/useMemories';
+import { useSmartSearch } from '../hooks/useSmartSearch';
 import { MemoryData } from '../types/memory.types';
-import { filterMemories } from '../utils/search';
 import { groupByPlatform } from '../utils/grouping';
 import SaveMemoryForm from './SaveMemoryForm';
 import MemoryCard from './MemoryCard';
@@ -17,8 +17,19 @@ import MemoryCanvasBackdrop from './MemoryCanvasBackdrop';
 
 type Filter = 'all' | 'links' | 'notes';
 
+const IS_DEMO = process.env.NEXT_PUBLIC_IS_DEMO_MODE === 'true';
+
+/** Human wording for how the current results were ranked. */
+const MODE_LABELS: Record<string, string> = {
+  hybrid: 'Ranked by meaning + keywords',
+  semantic: 'Ranked by meaning',
+  fts: 'Ranked by keywords',
+  ilike: 'Ranked by exact matches',
+};
+
 export default function MemoryDashboard() {
-  const { memories, isLoading, error, isSaving, save, update } = useMemories();
+  const { memories, isLoading, error, isSaving, reindexingId, save, update, reindex } =
+    useMemories();
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
   const [grouped, setGrouped] = useState(false);
@@ -33,7 +44,16 @@ export default function MemoryDashboard() {
   const connectedCount = memories.filter((m) => (m.linkedMemoryIds?.length ?? 0) > 0).length;
 
   // Global search applies first, across the whole library (composes with tabs).
-  const searched = useMemo(() => filterMemories(memories, query), [memories, query]);
+  // The intelligence service ranks by meaning and by content extracted from the
+  // links themselves; when it isn't reachable this quietly falls back to local
+  // filtering, so the box never stops working.
+  const {
+    results: searched,
+    isSearching,
+    mode: searchMode,
+    usedLinkIndex,
+    notice: searchNotice,
+  } = useSmartSearch(memories, query);
   const searchedLinks = searched.filter((m) => m.type === 'url');
   const searchedNotes = searched.filter((m) => m.type === 'note');
   const flatList =
@@ -181,9 +201,36 @@ export default function MemoryDashboard() {
             <SearchBar
               value={query}
               onChange={setQuery}
-              placeholder="Search your library — titles, notes, tags, platforms…"
+              placeholder="Search your library — ask for what a link was about…"
               ariaLabel="Search your library"
             />
+
+            {/* Tell the user how much understanding is behind these results. */}
+            {query.trim().length > 0 && (
+              <div className="flex items-center gap-2 min-h-4 -mt-2 text-[11px] text-muted">
+                {isSearching ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin text-primary-light" />
+                    <span>Searching everything you saved…</span>
+                  </>
+                ) : searchNotice ? (
+                  <span>{searchNotice}</span>
+                ) : (
+                  <>
+                    <span>
+                      {searched.length} {searched.length === 1 ? 'result' : 'results'}
+                    </span>
+                    {MODE_LABELS[searchMode] && <span>· {MODE_LABELS[searchMode]}</span>}
+                    {usedLinkIndex && (
+                      <span className="inline-flex items-center gap-1 text-primary-light">
+                        <Sparkles className="w-3 h-3" />
+                        including what&apos;s inside your links
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -274,6 +321,8 @@ export default function MemoryDashboard() {
           onClose={() => setPreview(null)}
           onOpenNote={openNoteFromLink}
           onSave={update}
+          onReindex={IS_DEMO ? undefined : reindex}
+          isReindexing={reindexingId === previewMemory.id}
         />
       )}
       {activeNoteMemory && (

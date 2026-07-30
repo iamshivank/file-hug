@@ -18,15 +18,19 @@ export function getEmbedInfo(content: string): EmbedInfo | null {
     return null;
   }
 
-  const host = url.hostname.replace(/^www\./, '');
+  const host = url.hostname.replace(/^(www\.|m\.|mobile\.)+/, '');
   const parts = url.pathname.split('/').filter(Boolean);
 
   if (host === 'instagram.com') {
-    // /reel/{code}, /reels/{code}, /p/{code}, /tv/{code} — embed lives at /{kind}/{code}/embed/
-    const kind = parts[0] === 'reels' ? 'reel' : parts[0];
-    if (['reel', 'p', 'tv'].includes(kind) && parts[1]) {
+    // Reels/posts appear as `/{kind}/{code}` and also as `/{username}/{kind}/{code}`,
+    // with `reels` as an alias for `reel`. Find the kind wherever it sits so the
+    // profile-prefixed form embeds too; the embed always lives at /{kind}/{code}/embed/.
+    const kindIndex = parts.findIndex((part) => ['reel', 'reels', 'p', 'tv'].includes(part));
+    const code = kindIndex === -1 ? undefined : parts[kindIndex + 1];
+    if (kindIndex !== -1 && code) {
+      const kind = parts[kindIndex] === 'reels' ? 'reel' : parts[kindIndex];
       return {
-        src: `https://www.instagram.com/${kind}/${parts[1]}/embed/`,
+        src: `https://www.instagram.com/${kind}/${code}/embed/`,
         aspect: kind === 'p' ? 'social' : 'vertical',
       };
     }
@@ -83,6 +87,50 @@ export function getEmbedInfo(content: string): EmbedInfo | null {
     };
   }
 
-  // GitHub, Medium and most other sites send X-Frame-Options: DENY — no embed.
+  if (host === 'open.spotify.com') {
+    // /intl-xx/ locale prefixes sit before the resource kind.
+    const offset = parts[0]?.startsWith('intl-') ? 1 : 0;
+    const kind = parts[offset];
+    const id = parts[offset + 1];
+    if (id && ['track', 'album', 'playlist', 'episode', 'show', 'artist'].includes(kind)) {
+      return { src: `https://open.spotify.com/embed/${kind}/${id}`, aspect: 'social' };
+    }
+    return null;
+  }
+
+  if (host === 'vimeo.com') {
+    const id = parts.find((part) => /^\d+$/.test(part));
+    if (id) return { src: `https://player.vimeo.com/video/${id}`, aspect: 'wide' };
+    return null;
+  }
+
+  if (host === 'twitch.tv' || host === 'clips.twitch.tv') {
+    // Twitch requires the embedding page's hostname in `parent`. Only the browser
+    // knows it, so read it at call time and skip the embed during SSR.
+    const parent = typeof window === 'undefined' ? null : window.location.hostname;
+    if (!parent) return null;
+    if (host === 'clips.twitch.tv' && parts[0]) {
+      return {
+        src: `https://clips.twitch.tv/embed?clip=${parts[0]}&parent=${parent}`,
+        aspect: 'wide',
+      };
+    }
+    if (parts[0] === 'videos' && parts[1]) {
+      return {
+        src: `https://player.twitch.tv/?video=${parts[1]}&parent=${parent}&autoplay=false`,
+        aspect: 'wide',
+      };
+    }
+    if (parts[0]) {
+      return {
+        src: `https://player.twitch.tv/?channel=${parts[0]}&parent=${parent}&autoplay=false`,
+        aspect: 'wide',
+      };
+    }
+    return null;
+  }
+
+  // GitHub, Medium, LinkedIn and most other sites send X-Frame-Options: DENY —
+  // no embed, so the viewer falls back to its metadata panel.
   return null;
 }

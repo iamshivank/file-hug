@@ -1,9 +1,21 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { X, ExternalLink, Loader2, Globe, FileText, Check, Plus } from 'lucide-react';
+import {
+  X,
+  ExternalLink,
+  Loader2,
+  Globe,
+  FileText,
+  Check,
+  Plus,
+  RefreshCw,
+  Captions,
+  AlertCircle,
+} from 'lucide-react';
 import { MemoryData, UpdateMemoryInput } from '../types/memory.types';
 import { getEmbedInfo } from '../utils/embed';
+import { enrichmentState } from '../utils/enrichment';
 import { detectContent } from '../utils/urlDetection';
 import { playFlipOpen } from '../utils/flip';
 import PlatformIcon from './PlatformIcon';
@@ -22,6 +34,10 @@ interface LinkPreviewProps {
   onOpenNote: (note: MemoryData) => void;
   /** Persists connection changes; resolves true on success. */
   onSave: (input: UpdateMemoryInput) => Promise<boolean>;
+  /** Re-opens the link and rebuilds its search index. Omitted in demo mode. */
+  onReindex?: (id: string) => Promise<boolean>;
+  /** True while this link is being re-read. */
+  isReindexing?: boolean;
 }
 
 /** Floating picture-in-picture viewer for a saved link's content and its notes. */
@@ -33,6 +49,8 @@ export default function LinkPreview({
   onClose,
   onOpenNote,
   onSave,
+  onReindex,
+  isReindexing = false,
 }: LinkPreviewProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   // Tracking the loaded memory id (rather than a boolean) makes the spinner
@@ -47,6 +65,12 @@ export default function LinkPreview({
 
   const embed = getEmbedInfo(memory.content);
   const detection = detectContent(memory.content);
+
+  const enrichment = memory.enrichment;
+  const state = enrichmentState(enrichment);
+  const isIndexing = state === 'indexing' || isReindexing;
+  // Treat a stalled read as failed — the retry below is the way out of both.
+  const indexFailed = (state === 'failed' || state === 'stalled') && !isReindexing;
 
   // On mount, flip the PiP open from the clicked card toward its resting corner.
   useEffect(() => {
@@ -119,8 +143,20 @@ export default function LinkPreview({
             <PlatformIcon platform={detection.platform} type="url" className="w-4 h-4" />
           </div>
           <span className="flex-1 min-w-0 truncate text-sm font-medium text-foreground">
-            {memory.title}
+            {enrichment?.pageTitle || memory.title}
           </span>
+          {onReindex && (
+            <button
+              type="button"
+              onClick={() => onReindex(memory.id)}
+              disabled={isIndexing}
+              aria-label="Re-read this link"
+              title="Re-read this link and refresh what we know about it"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-foreground hover:bg-surface-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isIndexing ? 'animate-spin' : ''}`} />
+            </button>
+          )}
           <a
             href={memory.content}
             target="_blank"
@@ -162,32 +198,124 @@ export default function LinkPreview({
             />
           </div>
         ) : (
-          <div className="px-6 py-8 text-center shrink-0">
-            <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-border flex items-center justify-center mx-auto mb-4">
-              {hostname ? (
-                /* eslint-disable-next-line @next/next/no-img-element -- tiny external favicon, not worth next/image */
-                <img
-                  src={`https://www.google.com/s2/favicons?domain=${hostname}&sz=64`}
-                  alt=""
-                  className="w-6 h-6 rounded"
-                />
-              ) : (
-                <Globe className="w-5 h-5 text-primary-light" />
+          <div className="shrink-0">
+            {/* A site that blocks framing can still be previewed from what we
+                extracted — its own image, title and description. */}
+            {enrichment?.imageUrl && (
+              /* eslint-disable-next-line @next/next/no-img-element -- arbitrary remote host, outside next/image's configured domains */
+              <img
+                src={enrichment.imageUrl}
+                alt=""
+                className="w-full max-h-44 object-cover bg-background"
+              />
+            )}
+            <div className="px-6 py-6 text-center">
+              {!enrichment?.imageUrl && (
+                <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-border flex items-center justify-center mx-auto mb-4">
+                  {enrichment?.faviconUrl || hostname ? (
+                    /* eslint-disable-next-line @next/next/no-img-element -- tiny external favicon, not worth next/image */
+                    <img
+                      src={
+                        enrichment?.faviconUrl ??
+                        `https://www.google.com/s2/favicons?domain=${hostname}&sz=64`
+                      }
+                      alt=""
+                      className="w-6 h-6 rounded"
+                    />
+                  ) : (
+                    <Globe className="w-5 h-5 text-primary-light" />
+                  )}
+                </div>
               )}
+              <p className="text-sm text-muted-light mb-1">
+                {enrichment?.siteName || hostname || 'This link'}
+              </p>
+              <p className="text-xs text-muted mb-5 leading-relaxed">
+                {enrichment?.description ??
+                  (isIndexing
+                    ? 'Reading this link…'
+                    : "This site doesn't allow inline previews.")}
+              </p>
+              <a
+                href={memory.content}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-light text-on-accent text-sm font-semibold rounded-full transition-colors"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open link
+              </a>
             </div>
-            <p className="text-sm text-muted-light mb-1">{hostname || 'This link'}</p>
-            <p className="text-xs text-muted mb-5 leading-relaxed">
-              This site doesn&apos;t allow inline previews.
-            </p>
-            <a
-              href={memory.content}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-light text-on-accent text-sm font-semibold rounded-full transition-colors"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Open link
-            </a>
+          </div>
+        )}
+
+        {/* What we know about this link — the searchable layer, made visible */}
+        {(enrichment || isIndexing) && (
+          <div className="border-t border-border px-3.5 py-3 shrink-0">
+            <span className="text-[11px] uppercase tracking-wider text-muted font-medium">
+              About this link
+            </span>
+            {isIndexing ? (
+              <p className="flex items-center gap-2 mt-2 text-xs text-muted">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-primary-light shrink-0" />
+                Opening the page and indexing what it says…
+              </p>
+            ) : indexFailed ? (
+              <div className="mt-2">
+                <p className="flex items-start gap-2 text-xs text-muted leading-relaxed">
+                  <AlertCircle className="w-3.5 h-3.5 text-danger shrink-0 mt-px" />
+                  <span>
+                    We couldn&apos;t read this page
+                    {enrichment?.error ? ` — ${enrichment.error}` : ''}. It&apos;s saved and
+                    searchable by title, just not by its contents.
+                  </span>
+                </p>
+                {onReindex && (
+                  <button
+                    type="button"
+                    onClick={() => onReindex(memory.id)}
+                    className="inline-flex items-center gap-1.5 mt-2 text-[11px] text-primary-light hover:underline cursor-pointer"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    Try again
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="mt-2 space-y-2">
+                {embed && enrichment?.description && (
+                  // With an embed above, the description is new information rather
+                  // than a repeat of the fallback panel.
+                  <p className="text-xs text-muted leading-relaxed line-clamp-4">
+                    {enrichment.description}
+                  </p>
+                )}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
+                  {enrichment?.author && <span>By {enrichment.author}</span>}
+                  {enrichment?.hasTranscript && (
+                    <span className="inline-flex items-center gap-1 text-primary-light">
+                      <Captions className="w-3 h-3" />
+                      Transcript indexed
+                    </span>
+                  )}
+                  {!!enrichment?.indexedChars && enrichment.indexedChars > 0 && (
+                    <span>{enrichment.indexedChars.toLocaleString()} characters searchable</span>
+                  )}
+                </div>
+                {!!enrichment?.keywords?.length && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {enrichment.keywords.slice(0, 6).map((keyword) => (
+                      <span
+                        key={keyword}
+                        className="text-[11px] px-2 py-0.5 bg-background border border-border rounded-full text-muted"
+                      >
+                        {keyword}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

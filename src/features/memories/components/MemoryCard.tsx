@@ -1,7 +1,8 @@
 'use client';
 
-import { Clock, Pencil, FileText } from 'lucide-react';
+import { Clock, Pencil, FileText, Loader2, Captions, AlertCircle } from 'lucide-react';
 import { MemoryData } from '../types/memory.types';
+import { enrichmentState } from '../utils/enrichment';
 import PlatformIcon from './PlatformIcon';
 
 function timeAgo(dateInput: string | Date): string {
@@ -46,6 +47,19 @@ export default function MemoryCard({
   // For URL cards the first two tags are platform/subtype (shown elsewhere);
   // for notes, drop the implicit "note" tag from the chip row.
   const extraTags = (isUrl ? memory.tags.slice(2) : memory.tags.filter((t) => t !== 'note')).slice(0, 3);
+
+  const enrichment = memory.enrichment;
+  const state = enrichmentState(enrichment);
+  const isIndexing = state === 'indexing';
+  // A stalled read is presented as a failure — from the user's side it is one.
+  const indexFailed = state === 'failed' || state === 'stalled';
+
+  // The most informative line available: what the page says about itself, then
+  // its own title, and only the bare URL as a last resort.
+  const summary = enrichment?.description || enrichment?.pageTitle || memory.content;
+  // A real page title earns its own line under the platform label.
+  const pageTitle =
+    enrichment?.pageTitle && enrichment.pageTitle !== memory.title ? enrichment.pageTitle : null;
 
   // The card's on-screen rect is the flip origin for the popup — capture it
   // from the element itself so click and keyboard opens both anchor correctly.
@@ -126,13 +140,39 @@ export default function MemoryCard({
 
       {/* Title */}
       <h3 className="font-display text-base text-foreground leading-snug group-hover:text-primary-light transition-colors line-clamp-2">
-        {memory.title}
+        {pageTitle ?? memory.title}
       </h3>
 
-      {/* Content preview */}
-      <p className={`text-muted text-xs leading-relaxed flex-1 ${isUrl ? 'truncate' : 'line-clamp-3'}`}>
-        {memory.content}
+      {/* Content preview — the page's own words when we have them, else the URL */}
+      <p
+        className={`text-muted text-xs leading-relaxed flex-1 ${
+          isUrl && summary === memory.content ? 'truncate' : 'line-clamp-3'
+        }`}
+      >
+        {summary}
       </p>
+
+      {/* What the indexer is doing, or what it found */}
+      {isUrl && (isIndexing || indexFailed || enrichment?.hasTranscript) && (
+        <div className="flex items-center gap-1.5 text-[11px] text-muted">
+          {isIndexing ? (
+            <>
+              <Loader2 className="w-3 h-3 animate-spin text-primary-light shrink-0" />
+              <span>Reading this link…</span>
+            </>
+          ) : indexFailed ? (
+            <>
+              <AlertCircle className="w-3 h-3 text-danger shrink-0" />
+              <span className="truncate">Couldn&apos;t read this link</span>
+            </>
+          ) : (
+            <>
+              <Captions className="w-3 h-3 text-primary-light shrink-0" />
+              <span>Transcript searchable</span>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Connected memories — links this note points to, or notes on this link */}
       {connected.length > 0 && (

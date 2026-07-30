@@ -6,6 +6,7 @@ import {
   FetchResult,
 } from '@/features/memories/types/memory.types';
 import { detectContent } from '@/features/memories/utils/urlDetection';
+import { isIntelligenceEnabled } from '@/features/memories/services/intelligenceConfig';
 import { getUserPlan } from '@/features/billing/subscription';
 import { PLANS } from '@/features/billing/plans';
 import { db } from '@/lib/db';
@@ -76,15 +77,19 @@ export class MemoryService {
     }
 
     // Link path — a URL is always required.
-    const content = input.content?.trim();
-    if (!content || content.length === 0) {
+    const rawContent = input.content?.trim();
+    if (!rawContent || rawContent.length === 0) {
       return { success: false, error: 'Content is required.' };
     }
-    if (content.length > 5000) {
+    if (rawContent.length > 5000) {
       return { success: false, error: 'Content must be under 5000 characters.' };
     }
 
-    const { type, title, tags } = detectContent(content);
+    // Detection normalises what was pasted — `instagram.com/reel/x` becomes a real
+    // absolute URL — and we store that form so embeds, previews and the indexer
+    // all work off a URL they can parse.
+    const { type, title, tags, url } = detectContent(rawContent);
+    const content = type === 'url' ? url : rawContent;
 
     // Enforce the Free-plan link limit server-side (never blocks notes).
     if (type === 'url' && userId) {
@@ -106,8 +111,9 @@ export class MemoryService {
     // Use a transaction to make the record write and bidirectional connection
     // updates atomic.
     const memory = await db.transaction(async (tx) => {
+      const schema = await import('@/db/schema');
       const [newMemory] = await tx
-        .insert((await import('@/db/schema')).memories)
+        .insert(schema.memories)
         .values({
           content,
           type,
@@ -133,7 +139,35 @@ export class MemoryService {
       return newMemory;
     });
 
-    return { success: true, data: { memory } };
+    // Queue the link for indexing so the UI can show "reading this link…" right
+    // away. Deliberately OUTSIDE the transaction and best-effort: this row is a
+    // progress indicator, and losing it must never cost the user their save (the
+    // table may not exist yet if the schema hasn't been pushed).
+    //
+    // Skipped entirely when no intelligence service is configured — a pending row
+    // nothing will ever pick up would leave every link stuck on "reading…".
+    let queuedForIndexing = false;
+    if (type === 'url' && userId && isIntelligenceEnabled()) {
+      try {
+        await memoryRepository.markIndexPending(memory.id, userId, content);
+        queuedForIndexing = true;
+      } catch (error) {
+        console.warn(
+          '[memories] could not queue link for indexing. ' +
+            'Run `npm run db:push` to create memory_index.',
+          error
+        );
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        memory: queuedForIndexing
+          ? { ...memory, enrichment: { status: 'pending' as const } }
+          : memory,
+      },
+    };
   }
 
   async update(input: UpdateMemoryInput, userId?: string): Promise<SaveResult> {
@@ -265,8 +299,21 @@ export class MemoryService {
     if (!userId) {
       return { success: true, data: { memories: [] } };
     }
-    const memories = await memoryRepository.findAll(userId);
-    return { success: true, data: { memories } };
+    try {
+      const memories = await memoryRepository.findAllWithEnrichment(userId);
+      return { success: true, data: { memories } };
+    } catch (error) {
+      // `memory_index` may not exist yet (schema not pushed). The library is the
+      // core feature — serve it without enrichment rather than failing the whole
+      // read over an optional column.
+      console.warn(
+        '[memories] enrichment unavailable, serving memories without it. ' +
+          'Run `npm run db:push` to create memory_index.',
+        error
+      );
+      const memories = await memoryRepository.findAll(userId);
+      return { success: true, data: { memories } };
+    }
   }
 }
 
