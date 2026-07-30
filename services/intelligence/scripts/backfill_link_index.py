@@ -122,6 +122,7 @@ async def backfill(
             return_exceptions=True,
         )
 
+        batch_successes = 0
         for status in statuses:
             if isinstance(status, BaseException):
                 # An unexpected error leaves the row untouched. Count it as failed
@@ -130,10 +131,16 @@ async def backfill(
                 failed += 1
             elif status == "ready":
                 ready += 1
+                batch_successes += 1
             else:
                 failed += 1
 
         print(f"  running totals: {ready} indexed, {failed} failed")
+
+        # Detect a no-progress batch: all items failed, so we made no progress
+        if batch_successes == 0:
+            print("  no progress in this batch (all failed), stopping to prevent infinite loop")
+            break
 
         # A short batch means we've drained the queue.
         if len(rows) < batch_size:

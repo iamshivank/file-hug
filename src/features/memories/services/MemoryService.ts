@@ -315,6 +315,46 @@ export class MemoryService {
       return { success: true, data: { memories } };
     }
   }
+
+  /**
+   * Re-index a saved link — open the URL again and rebuild its search index.
+   *
+   * Unlike the fire-and-forget indexing after a save, this waits for the result
+   * and returns the refreshed memory with its updated enrichment. Used for retrying
+   * a link whose first read failed, or manually refreshing a link that changed.
+   */
+  async reindex(memoryId: string, userId: string, sessionToken: string): Promise<SaveResult> {
+    if (!UUID_REGEX.test(memoryId)) {
+      return { success: false, error: 'A valid memory id is required.' };
+    }
+
+    const memory = await memoryRepository.findById(memoryId, userId);
+    if (!memory) {
+      return { success: false, error: 'Memory not found.' };
+    }
+    if (memory.type !== 'url') {
+      return { success: false, error: 'Only links can be indexed.' };
+    }
+
+    // Import indexMemory here to avoid circular dependencies
+    const { indexMemory } = await import('./IntelligenceClient');
+    const result = await indexMemory(memoryId, sessionToken, { force: true });
+    if (!result) {
+      return {
+        success: false,
+        error: 'The memory intelligence service is unavailable. Try again shortly.',
+      };
+    }
+
+    // Read back the persisted row so the response matches what other reads return
+    const enrichment = await memoryRepository.findEnrichment(memoryId, userId);
+    const refreshed = await memoryRepository.findById(memoryId, userId);
+
+    return {
+      success: true,
+      data: { memory: { ...(refreshed ?? memory), enrichment } },
+    };
+  }
 }
 
 export const memoryService = new MemoryService();

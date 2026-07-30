@@ -25,32 +25,15 @@ export async function GET(): Promise<NextResponse> {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  let result;
   try {
     const userId = await currentUserId();
     const body = await request.json();
-    const result = await memoryService.save(body, userId);
+    result = await memoryService.save(body, userId);
 
     if (!result.success) {
       return NextResponse.json(result, { status: 400 });
     }
-
-    // Opening the link takes seconds; the user should not wait for it. `after`
-    // runs this once the response has been sent, and the memory is already stored
-    // with `enrichment.status = 'pending'` so the UI can show the work in flight.
-    //
-    // Gated on that pending row actually existing: if the index table is missing,
-    // the service has nowhere to write and there is no point waking it up.
-    const saved = result.data?.memory;
-    if (userId && saved?.type === 'url' && saved.enrichment?.status === 'pending') {
-      const token = await getSessionToken();
-      if (token) {
-        after(async () => {
-          await indexMemory(saved.id, token);
-        });
-      }
-    }
-
-    return NextResponse.json(result, { status: 201 });
   } catch (error) {
     console.error('Memories POST error:', error);
     return NextResponse.json(
@@ -58,6 +41,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { status: 500 }
     );
   }
+
+  // Post-save indexing is OUTSIDE the try/catch so errors here cannot be
+  // misreported as save errors (the save already succeeded). Opening the link
+  // takes seconds; the user should not wait for it. `after` runs this once the
+  // response has been sent, and the memory is already stored with
+  // `enrichment.status = 'pending'` so the UI can show the work in flight.
+  //
+  // Gated on that pending row actually existing: if the index table is missing,
+  // the service has nowhere to write and there is no point waking it up.
+  const saved = result.data?.memory;
+  const userId = await currentUserId();
+  if (userId && saved?.type === 'url' && saved.enrichment?.status === 'pending') {
+    const token = await getSessionToken();
+    if (token) {
+      after(async () => {
+        await indexMemory(saved.id, token);
+      });
+    }
+  }
+
+  return NextResponse.json(result, { status: 201 });
 }
 
 export async function PATCH(request: NextRequest): Promise<NextResponse> {
