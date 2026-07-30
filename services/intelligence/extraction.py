@@ -47,6 +47,9 @@ MAX_TEXT_CHARS = 20_000
 #: Cap on stored transcript text (transcripts of long videos get very large).
 MAX_TRANSCRIPT_CHARS = 20_000
 
+#: Maximum response body size to download (5MB)
+_MAX_BODY_BYTES = 5 * 1024 * 1024
+
 _YOUTUBE_HOSTS = {
     "youtube.com",
     "www.youtube.com",
@@ -97,27 +100,31 @@ class ExtractedPage:
         )
 
 
-def is_safe_url(url: str) -> tuple[bool, str | None]:
+def is_safe_url(url: str) -> tuple[bool, str | None, str | None]:
     """Validate scheme and resolve the hostname to check for SSRF risks.
 
-    Returns ``(is_safe, error_message)``. Only http/https are allowed. Private,
-    loopback, link-local, multicast, reserved and cloud-metadata IPs are rejected.
+    Returns ``(is_safe, error_message, resolved_ip)``. Only http/https are allowed.
+    Private, loopback, link-local, multicast, reserved and cloud-metadata IPs are
+    rejected. The resolved IP should be pinned for the actual HTTP request to prevent
+    DNS rebinding attacks.
     """
     parsed = urlparse(url)
     scheme = parsed.scheme.lower() if parsed.scheme else ""
 
     if scheme not in ("http", "https"):
-        return False, f"Unsupported scheme: {scheme or '(none)'}"
+        return False, f"Unsupported scheme: {scheme or '(none)'}", None
 
     hostname = parsed.hostname
     if not hostname:
-        return False, "Missing hostname"
+        return False, "Missing hostname", None
 
     try:
         addr_info = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
     except (socket.gaierror, socket.error) as exc:
-        return False, f"DNS resolution failed: {exc}"
+        return False, f"DNS resolution failed: {exc}", None
 
+    # Use the first resolved IP
+    resolved_ip = None
     for _family, _, _, _, sockaddr in addr_info:
         ip_str = sockaddr[0]
         try:
@@ -126,13 +133,21 @@ def is_safe_url(url: str) -> tuple[bool, str | None]:
             continue  # skip malformed addresses
 
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
-            return False, f"Blocked private/internal IP: {ip}"
+            return False, f"Blocked private/internal IP: {ip}", None
 
-        # Cloud metadata services (AWS/GCP/DigitalOcean, then Azure).
-        if str(ip) in ("169.254.169.254", "168.63.129.16"):
-            return False, f"Blocked metadata service IP: {ip}"
+        # Cloud metadata services (Azure is 168.63.129.16, not link-local, so needs explicit check).
+        # AWS/GCP/DigitalOcean 169.254.169.254 is already caught by is_link_local.
+        if str(ip) == "168.63.129.16":
+            return False, f"Blocked metadata service IP: {ip}", None
 
-    return True, None
+        # Keep the first valid IP for pinning
+        if resolved_ip is None:
+            resolved_ip = ip_str
+
+    if resolved_ip is None:
+        return False, "No valid IP address resolved", None
+
+    return True, None, resolved_ip
 
 
 def _meta(soup: BeautifulSoup, *, prop: str | None = None, name: str | None = None) -> str | None:
@@ -300,37 +315,77 @@ async def fetch_page(url: str) -> ExtractedPage:
     if not url:
         return ExtractedPage(url=url, error="Empty URL")
 
-    safe, safety_error = is_safe_url(url)
+    safe, safety_error, resolved_ip = is_safe_url(url)
     if not safe:
         return ExtractedPage(url=url, error=f"Unsafe URL: {safety_error}")
 
     result: ExtractedPage
     try:
+        # Parse the URL to build the IP-pinned version
+        parsed = urlparse(url)
+        hostname = parsed.hostname or ""
+        port = parsed.port
+
+        # Build transport that pins to the resolved IP
+        # We'll override the destination but preserve the Host header and SNI
+        transport = httpx.HTTPTransport(retries=0)
+
         async with httpx.AsyncClient(
             timeout=_FETCH_TIMEOUT,
             follow_redirects=False,  # followed manually so each hop is re-validated
-            headers={"User-Agent": _USER_AGENT},
+            headers={"User-Agent": _USER_AGENT, "Host": hostname},
+            transport=transport,
         ) as client:
             current_url = url
+            current_hostname = hostname
+            current_resolved_ip = resolved_ip
+
             for _ in range(_MAX_REDIRECTS + 1):
-                resp = await client.get(current_url)
+                # Build URL using the resolved IP instead of hostname
+                parsed_current = urlparse(current_url)
+                port_suffix = f":{parsed_current.port}" if parsed_current.port else ""
+                ip_url = f"{parsed_current.scheme}://{current_resolved_ip}{port_suffix}{parsed_current.path}"
+                if parsed_current.query:
+                    ip_url += f"?{parsed_current.query}"
+                if parsed_current.fragment:
+                    ip_url += f"#{parsed_current.fragment}"
 
-                if resp.status_code not in (301, 302, 303, 307, 308):
-                    resp.raise_for_status()
-                    result = _parse_html(current_url, resp.text)
-                    break
+                # Make the request with the IP URL but preserve Host header, streaming response
+                async with client.stream("GET", ip_url, headers={"Host": current_hostname}) as resp:
+                    if resp.status_code not in (301, 302, 303, 307, 308):
+                        resp.raise_for_status()
 
-                redirect_url = resp.headers.get("location")
-                if not redirect_url:
-                    raise ValueError("Redirect response missing Location header")
+                        # Validate Content-Type before reading the body
+                        content_type = resp.headers.get("content-type", "").lower()
+                        if not any(html_type in content_type for html_type in ["text/html", "application/xhtml"]):
+                            raise ValueError(f"Non-HTML content type: {content_type}")
+
+                        # Stream the response body with a size limit
+                        chunks = []
+                        total_size = 0
+                        async for chunk in resp.aiter_bytes():
+                            total_size += len(chunk)
+                            if total_size > _MAX_BODY_BYTES:
+                                raise ValueError(f"Response body exceeds {_MAX_BODY_BYTES} bytes")
+                            chunks.append(chunk)
+
+                        html = b"".join(chunks).decode("utf-8", errors="replace")
+                        result = _parse_html(current_url, html)
+                        break
+
+                    redirect_url = resp.headers.get("location")
+                    if not redirect_url:
+                        raise ValueError("Redirect response missing Location header")
 
                 redirect_url = urljoin(current_url, redirect_url)
 
-                safe, safety_error = is_safe_url(redirect_url)
+                safe, safety_error, redirect_ip = is_safe_url(redirect_url)
                 if not safe:
                     return ExtractedPage(url=url, error=f"Unsafe redirect: {safety_error}")
 
                 current_url = redirect_url
+                current_hostname = urlparse(redirect_url).hostname or ""
+                current_resolved_ip = redirect_ip
             else:
                 return ExtractedPage(url=url, error="Too many redirects")
 

@@ -36,4 +36,4 @@ EXPOSE 8000
 # Most platforms inject $PORT; fall back to 8000 for plain `docker run`.
 # Single worker by default: each holds its own asyncpg pool (max_size=10), so
 # raise workers only with your database's connection limit in mind.
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
