@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import db
 from config import get_settings
-from routers import dashboard, extract, search
+from routers import dashboard, extract, link_index, search
 
 
 @asynccontextmanager
@@ -55,5 +55,6 @@ async def health() -> dict[str, str]:
 
 
 app.include_router(extract.router, tags=["extract"])
+app.include_router(link_index.router, tags=["index"])
 app.include_router(search.router, tags=["search"])
 app.include_router(dashboard.router, tags=["dashboard"])

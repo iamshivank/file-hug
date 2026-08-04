@@ -172,23 +172,302 @@ async def search_semantic(
 async def search_ilike(
     user_id: str, query_text: str, limit: int
 ) -> list[dict[str, Any]]:
-    """Last-resort substring search on title/content (case-insensitive)."""
+    """Last-resort substring search (case-insensitive).
+
+    Covers the saved title/content AND the extracted page metadata, so a query
+    that matches only the real page title still finds the memory even when
+    neither FTS nor embeddings are available.
+
+    This is the bottom of the degradation ladder, so it degrades once more on its
+    own: if ``memory_index`` is missing (migrations not yet applied) it retries
+    against ``memories`` alone rather than returning nothing.
+    """
     pool = get_pool()
     pattern = f"%{query_text}%"
+    try:
+        rows = await pool.fetch(
+            """
+            SELECT m.id
+            FROM memories m
+            LEFT JOIN memory_index mi ON mi.memory_id = m.id
+            WHERE m.user_id = $1
+              AND (
+                m.title ILIKE $2
+                OR m.content ILIKE $2
+                OR mi.page_title ILIKE $2
+                OR mi.description ILIKE $2
+                OR mi.site_name ILIKE $2
+                OR mi.search_text ILIKE $2
+              )
+            ORDER BY m.updated_at DESC
+            LIMIT $3
+            """,
+            user_id,
+            pattern,
+            limit,
+        )
+    except asyncpg.PostgresError:
+        rows = await pool.fetch(
+            """
+            SELECT id
+            FROM memories
+            WHERE user_id = $1
+              AND (title ILIKE $2 OR content ILIKE $2)
+            ORDER BY updated_at DESC
+            LIMIT $3
+            """,
+            user_id,
+            pattern,
+            limit,
+        )
+    return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Link-index search helpers — matching against extracted page content
+# ---------------------------------------------------------------------------
+async def search_index_fts(
+    user_id: str, query_text: str, limit: int
+) -> list[dict[str, Any]]:
+    """Full-text search over what we extracted by opening each saved link.
+
+    Returns ``memory_id`` aliased to ``id`` so results fuse directly with the
+    other signals.
+    """
+    pool = get_pool()
     rows = await pool.fetch(
         """
-        SELECT id
-        FROM memories
+        SELECT memory_id AS id,
+               ts_rank_cd(search_tsv, plainto_tsquery('english', $2)) AS rank
+        FROM memory_index
         WHERE user_id = $1
-          AND (title ILIKE $2 OR content ILIKE $2)
-        ORDER BY updated_at DESC
+          AND search_tsv @@ plainto_tsquery('english', $2)
+        ORDER BY rank DESC
         LIMIT $3
         """,
         user_id,
-        pattern,
+        query_text,
         limit,
     )
     return [dict(r) for r in rows]
+
+
+async def search_index_semantic(
+    user_id: str, embedding: list[float], limit: int
+) -> list[dict[str, Any]]:
+    """Semantic search over indexed link content via pgvector cosine distance."""
+    pool = get_pool()
+    vec_literal = "[" + ",".join(f"{v:.6f}" for v in embedding) + "]"
+    rows = await pool.fetch(
+        """
+        SELECT memory_id AS id, (embedding <=> $2::vector) AS distance
+        FROM memory_index
+        WHERE user_id = $1
+          AND embedding IS NOT NULL
+        ORDER BY embedding <=> $2::vector ASC
+        LIMIT $3
+        """,
+        user_id,
+        vec_literal,
+        limit,
+    )
+    return [dict(r) for r in rows]
+
+
+async def user_has_index_embeddings(user_id: str) -> bool:
+    """True if the user has at least one indexed link with an embedding."""
+    pool = get_pool()
+    row = await pool.fetchrow(
+        """
+        SELECT 1 FROM memory_index
+        WHERE user_id = $1 AND embedding IS NOT NULL
+        LIMIT 1
+        """,
+        user_id,
+    )
+    return row is not None
+
+
+async def fetch_index_snippets(
+    user_id: str, ids: list[str], length: int = 220
+) -> dict[str, str]:
+    """Return ``memory_id -> short excerpt`` for the given memories.
+
+    Prefers the page's own description, falling back to the head of the extracted
+    body text. Used to show *why* a result matched.
+    """
+    if not ids:
+        return {}
+    pool = get_pool()
+    rows = await pool.fetch(
+        """
+        SELECT memory_id,
+               coalesce(nullif(description, ''), left(coalesce(search_text, ''), $3)) AS snippet
+        FROM memory_index
+        WHERE user_id = $1 AND memory_id = ANY($2::text[])
+        """,
+        user_id,
+        ids,
+        length,
+    )
+    return {r["memory_id"]: r["snippet"] for r in rows if r["snippet"]}
+
+
+# ---------------------------------------------------------------------------
+# Link-index writes — owned by the /index endpoint
+# ---------------------------------------------------------------------------
+async def fetch_memory_for_index(
+    memory_id: str, user_id: str
+) -> dict[str, Any] | None:
+    """Fetch the memory to index, scoped to its owner. None when not found."""
+    pool = get_pool()
+    row = await pool.fetchrow(
+        """
+        SELECT id, content, type, title, tags
+        FROM memories
+        WHERE id = $1 AND user_id = $2
+        LIMIT 1
+        """,
+        memory_id,
+        user_id,
+    )
+    return dict(row) if row else None
+
+
+async def index_status(memory_id: str, user_id: str) -> str | None:
+    """Return the current index status for a memory, or None when unindexed."""
+    pool = get_pool()
+    row = await pool.fetchrow(
+        "SELECT status FROM memory_index WHERE memory_id = $1 AND user_id = $2",
+        memory_id,
+        user_id,
+    )
+    return row["status"] if row else None
+
+
+async def upsert_memory_index(
+    *,
+    memory_id: str,
+    user_id: str,
+    url: str,
+    status: str,
+    page_title: str | None,
+    description: str | None,
+    site_name: str | None,
+    author: str | None,
+    image_url: str | None,
+    favicon_url: str | None,
+    transcript: str | None,
+    keywords: list[str],
+    search_text: str | None,
+    error: str | None,
+    embedding: list[float] | None,
+) -> None:
+    """Insert or replace the index row for a memory.
+
+    ``memory_id`` is the primary key, so re-indexing a link overwrites its
+    previous result rather than accumulating rows. ``embedding`` is written as a
+    text literal cast to ``vector`` so no pgvector codec registration is needed.
+    """
+    pool = get_pool()
+    vec_literal = (
+        "[" + ",".join(f"{v:.6f}" for v in embedding) + "]" if embedding else None
+    )
+    await pool.execute(
+        """
+        INSERT INTO memory_index (
+            memory_id, user_id, url, status, page_title, description, site_name,
+            author, image_url, favicon_url, transcript, keywords, search_text,
+            error, embedding, fetched_at, created_at, updated_at
+        ) VALUES (
+            $1, $2, $3, $4::index_status, $5, $6, $7,
+            $8, $9, $10, $11, $12::text[], $13,
+            $14, $15::vector, now(), now(), now()
+        )
+        ON CONFLICT (memory_id) DO UPDATE SET
+            user_id     = EXCLUDED.user_id,
+            url         = EXCLUDED.url,
+            status      = EXCLUDED.status,
+            page_title  = EXCLUDED.page_title,
+            description = EXCLUDED.description,
+            site_name   = EXCLUDED.site_name,
+            author      = EXCLUDED.author,
+            image_url   = EXCLUDED.image_url,
+            favicon_url = EXCLUDED.favicon_url,
+            transcript  = EXCLUDED.transcript,
+            keywords    = EXCLUDED.keywords,
+            search_text = EXCLUDED.search_text,
+            error       = EXCLUDED.error,
+            embedding   = EXCLUDED.embedding,
+            fetched_at  = now(),
+            updated_at  = now()
+        """,
+        memory_id,
+        user_id,
+        url,
+        status,
+        page_title,
+        description,
+        site_name,
+        author,
+        image_url,
+        favicon_url,
+        transcript,
+        keywords,
+        search_text,
+        error,
+        vec_literal,
+    )
+
+
+async def set_memory_embedding_if_null(
+    memory_id: str, user_id: str, embedding: list[float]
+) -> None:
+    """Seed ``memories.embedding`` from the richer indexed text, if still empty.
+
+    Scoped to the owner and guarded on NULL so a dedicated backfill (or a later,
+    better embedding) is never clobbered.
+    """
+    pool = get_pool()
+    vec_literal = "[" + ",".join(f"{v:.6f}" for v in embedding) + "]"
+    await pool.execute(
+        """
+        UPDATE memories
+        SET embedding = $3::vector
+        WHERE id = $1 AND user_id = $2 AND embedding IS NULL
+        """,
+        memory_id,
+        user_id,
+        vec_literal,
+    )
+
+
+async def improve_memory_title(
+    memory_id: str, user_id: str, new_title: str
+) -> bool:
+    """Replace a placeholder title with the real page title.
+
+    Only applies when the stored title is still the hostname-derived fallback —
+    i.e. the link matched no platform rule, so `tags` holds a single element.
+    Platform labels like "Instagram Reel" are deliberately preserved, since they
+    describe the *kind* of thing saved and users navigate by them.
+    """
+    pool = get_pool()
+    result = await pool.execute(
+        """
+        UPDATE memories
+        SET title = left($3, 200), updated_at = now()
+        WHERE id = $1
+          AND user_id = $2
+          AND type = 'url'
+          AND coalesce(array_length(tags, 1), 0) <= 1
+        """,
+        memory_id,
+        user_id,
+        new_title,
+    )
+    # asyncpg returns the command tag, e.g. "UPDATE 1" or "UPDATE 0".
+    return result.split()[-1] != "0"
 
 
 async def fetch_memories_by_ids(
@@ -323,6 +602,49 @@ async def fetch_rows_needing_embedding(
             ORDER BY created_at ASC
             LIMIT $2
             """,
+            user_id,
+            batch_size,
+        )
+    return [dict(r) for r in rows]
+
+
+async def fetch_links_needing_index(
+    user_id: str | None, batch_size: int, *, include_failed: bool = False
+) -> list[dict[str, Any]]:
+    """Fetch link memories that have no usable ``memory_index`` row yet.
+
+    Covers links saved before indexing existed, plus any left in ``pending`` by a
+    crash or an unreachable service. Rows previously marked ``failed`` are skipped
+    unless ``include_failed`` is set, so a re-run does not keep hammering pages
+    that are genuinely unreachable.
+
+    If ``user_id`` is None, spans all users (admin/backfill use only).
+    """
+    pool = get_pool()
+    status_filter = (
+        "mi.memory_id IS NULL OR mi.status IN ('pending', 'failed')"
+        if include_failed
+        else "mi.memory_id IS NULL OR mi.status = 'pending'"
+    )
+    query = f"""
+        SELECT m.id, m.content, m.title, m.tags, m.user_id
+        FROM memories m
+        LEFT JOIN memory_index mi ON mi.memory_id = m.id
+        WHERE m.type = 'url'
+          AND m.user_id IS NOT NULL
+          AND ({status_filter})
+          {{user_clause}}
+        ORDER BY m.created_at ASC
+        LIMIT {{limit_param}}
+    """
+    if user_id is None:
+        rows = await pool.fetch(
+            query.format(user_clause="", limit_param="$1"),
+            batch_size,
+        )
+    else:
+        rows = await pool.fetch(
+            query.format(user_clause="AND m.user_id = $1", limit_param="$2"),
             user_id,
             batch_size,
         )

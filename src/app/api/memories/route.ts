@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { memoryService } from '@/features/memories/services/MemoryService';
-import { getSession } from '@/features/auth/session';
+import { indexMemory } from '@/features/memories/services/IntelligenceClient';
+import { getSession, getSessionToken } from '@/features/auth/session';
 
 /** Resolve the scoping user id from the session (ignore demo users on the DB path). */
 async function currentUserId(): Promise<string | undefined> {
@@ -31,6 +32,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     if (!result.success) {
       return NextResponse.json(result, { status: 400 });
+    }
+
+    // Opening the link takes seconds; the user should not wait for it. `after`
+    // runs this once the response has been sent, and the memory is already stored
+    // with `enrichment.status = 'pending'` so the UI can show the work in flight.
+    //
+    // Gated on that pending row actually existing: if the index table is missing,
+    // the service has nowhere to write and there is no point waking it up.
+    const saved = result.data?.memory;
+    if (userId && saved?.type === 'url' && saved.enrichment?.status === 'pending') {
+      const token = await getSessionToken();
+      if (token) {
+        after(async () => {
+          await indexMemory(saved.id, token);
+        });
+      }
     }
 
     return NextResponse.json(result, { status: 201 });

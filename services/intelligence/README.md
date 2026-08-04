@@ -4,14 +4,20 @@ A standalone **Python / FastAPI** microservice that provides the "memory
 intelligence" layer for File Hug:
 
 - **Async URL extraction** — OpenGraph / Twitter / `<title>` / meta-description
-  parsing, plus YouTube transcript retrieval.
-- **Hybrid search** — pgvector semantic search + PostgreSQL full-text search,
-  fused with Reciprocal Rank Fusion (RRF).
+  parsing, **page body text**, plus YouTube transcript retrieval.
+- **Link indexing** — opens each saved link and stores what it found in
+  `memory_index`, so search can match words that appear *inside* a page rather
+  than only in its URL.
+- **Hybrid search** — pgvector semantic search + PostgreSQL full-text search over
+  both the saved memory and the extracted link content, fused with Reciprocal
+  Rank Fusion (RRF).
 - **Dashboard summary** — per-user aggregate stats.
 
 It shares the **same Neon PostgreSQL database** as the Next.js app and connects
-via `asyncpg`. It does not own or recreate the app's tables — a single additive
-migration adds a full-text column, an embedding column, and their indexes.
+via `asyncpg`. It does not own or recreate the app's tables: `memories` and
+`memory_index` are both created from the Drizzle schema (`npm run db:push`), and
+the migrations here are additive, adding only the full-text and vector columns
+Drizzle cannot express, plus their indexes.
 
 ---
 
@@ -39,14 +45,40 @@ pip install -r requirements.txt
 cp .env.example .env
 # then edit .env — at minimum set DATABASE_URL and AUTH_SECRET
 
-# 4. Run the migration (adds search_tsv + embedding columns and indexes)
-psql "$DATABASE_URL" -f migrations/001_intelligence.sql
+# 4. Create the tables from the Drizzle schema FIRST (run from the repo root).
+#    This creates `memory_index`, which migration 002 then extends.
+#    cd ../.. && npm run db:push
 
-# 5. Run the service
+# 5. Run the migrations (add search_tsv + embedding columns and their indexes)
+psql "$DATABASE_URL" -f migrations/001_intelligence.sql
+psql "$DATABASE_URL" -f migrations/002_memory_index.sql
+
+# 6. Run the service
 uvicorn main:app --reload --port 8000
 ```
 
+> **Order matters.** `db:push` before the migrations, since 002 alters a table
+> Drizzle creates. And if `drizzle-kit push` ever offers to drop `search_tsv`,
+> `embedding`, or their indexes, answer **no** — it does not know about columns
+> added outside the Drizzle schema.
+
 Health check: `curl http://localhost:8000/health` → `{"status":"ok"}`.
+
+### Backfilling the link index (for existing links)
+
+Links saved from now on are indexed automatically. Links saved *before* indexing
+existed have no `memory_index` row, so search can only match their titles. This
+reads them:
+
+```bash
+python scripts/backfill_link_index.py                  # all users
+python scripts/backfill_link_index.py --user u_1       # one user
+python scripts/backfill_link_index.py --retry-failed   # re-attempt failures once
+```
+
+It makes real HTTP requests to third-party sites, so concurrency defaults to a
+polite 4 (`--concurrency` to change). Also picks up anything stuck in `pending`
+because the service was down when a link was saved.
 
 ### Backfilling embeddings (optional)
 
@@ -93,19 +125,89 @@ memories.
 | Method | Path                     | Auth | Description |
 | ------ | ------------------------ | ---- | ----------- |
 | GET    | `/health`                | No   | Liveness probe → `{"status":"ok"}`. |
-| POST   | `/extract`               | Yes  | Body `{ "url": "..." }`. Returns `{title, description, image, site_name, favicon, transcript, error}`. Always 200 (fetch errors surface in `error`). |
-| GET    | `/search?q=...&limit=20` | Yes  | Hybrid search over the user's memories. Returns ranked `results` with `score` and matched signals, plus effective `mode` (`hybrid`/`fts`/`ilike`). |
+| POST   | `/extract`               | Yes  | Body `{ "url": "..." }`. Returns `{final_url, title, description, image, site_name, favicon, author, keywords, text, transcript, error}` without persisting anything. Always 200 (fetch errors surface in `error`). |
+| POST   | `/index`                 | Yes  | Body `{ "memory_id": "...", "force": false }`. Opens that memory's link, extracts it, embeds it, and upserts one `memory_index` row. Returns `status` (`ready`/`failed`/`skipped`) and a summary of what was stored. |
+| GET    | `/search?q=...&limit=20` | Yes  | Hybrid search over the user's memories **and** their indexed link content. Returns ranked `results` with `score`, matched signals and a `snippet`, plus the effective `mode` and `used_link_index`. |
 | GET    | `/dashboard/summary`     | Yes  | Per-user totals, link/note counts, connected count, top platforms, recent activity, and 7-day saves. |
+
+### How indexing fits together
+
+```
+User saves a link
+  → Next.js POST /api/memories               (stores it, status = 'pending')
+  → after() → POST /index                    (this service, background)
+      → fetch the URL, parse metadata + body text (+ transcript)
+      → embed the result
+      → upsert memory_index                  (status = 'ready' | 'failed')
+  → the UI polls /api/memories until it is no longer 'pending'
+```
+
+`/index` is idempotent: it skips a memory that already has a `ready` row unless
+`force` is set. A link that fails still gets a row (with `status='failed'` and the
+reason), so the UI can show what happened and offer a retry instead of the link
+looking permanently un-indexed.
+
+### Search signals
+
+`/search` fuses up to four ranked lists with RRF, so a memory matched by several
+signals outranks one matched by a single signal:
+
+| Signal           | Source |
+| ---------------- | ------ |
+| `fts`            | `memories.search_tsv` — what the user saved (title + content) |
+| `semantic`       | `memories.embedding` |
+| `index_fts`      | `memory_index.search_tsv` — real page title, description, body text, transcript, keywords |
+| `index_semantic` | `memory_index.embedding` |
 
 ### Graceful degradation
 
-- `/extract` never returns 5xx for a fetch failure — it returns partial data
-  with an `error` field.
-- `/search` falls back to FTS-only when no embeddings exist, and to `ILIKE`
-  when FTS finds nothing. It works before any embeddings are backfilled and
-  even if pgvector is unavailable.
+- `/extract` and `/index` never return 5xx for a fetch failure — they return
+  partial data with an `error` field.
+- `/search` drops the semantic signals when the user has no embeddings (or
+  pgvector is unavailable), drops the `index_*` signals when the link index is
+  empty or missing (migration 002 not yet run), and falls back to `ILIKE` when no
+  ranked signal produced anything. It works before any embeddings are backfilled.
+- `/index` still stores the extracted text when embedding fails, so full-text
+  search keeps working without a vector.
 
 ---
+
+## Deploying
+
+This is a **persistent ASGI process**, so it cannot run on Vercel next to the
+Next.js app — it needs a container/VM host: Railway, Render, Fly.io, Google Cloud
+Run, or any box running the included `Dockerfile`.
+
+```bash
+docker build -t filehug-intelligence services/intelligence
+docker run -p 8000:8000 --env-file services/intelligence/.env filehug-intelligence
+```
+
+Set on the service:
+
+| Variable         | Value |
+| ---------------- | ----- |
+| `DATABASE_URL`   | The **same** Neon database as the Next.js app |
+| `AUTH_SECRET`    | The **same** secret as the Next.js app, or every request 401s |
+| `ALLOWED_ORIGIN` | Your production origin, e.g. `https://filehug.app` |
+
+Then set `INTELLIGENCE_SERVICE_URL` on the **Next.js** side to this service's
+public URL. Until you do, the app treats link intelligence as switched off and
+behaves exactly as it did before the feature existed — links save, search falls
+back to local filtering, no errors are shown.
+
+Finally, run `scripts/backfill_link_index.py` once to index links saved before the
+service existed.
+
+### Health & sizing
+
+- `GET /health` needs no auth — point your platform's health check at it.
+- One worker holds one asyncpg pool (`max_size=10`). Scale workers/replicas with
+  your Postgres connection limit in mind; on Neon, prefer the pooled connection
+  string if you run several replicas.
+- The default embedder is offline and CPU-only, so a small instance is fine.
+  `OPENAI_API_KEY` swaps in API-backed embeddings (and requires `EMBED_DIM=1536`
+  plus a matching `vector(1536)` column).
 
 ## Next.js integration
 
@@ -127,3 +229,11 @@ Browser → Next.js /api/intelligence/search?q=...
         → INTELLIGENCE_SERVICE_URL + /search?q=...
         → this service (verifies token, scopes to user_id)
 ```
+
+`/index` is called by the Next.js **server** rather than the browser (see
+`src/features/memories/services/IntelligenceClient.ts`), which forwards the same
+session token directly.
+
+> **Session tokens must carry `exp`.** `auth.py` rejects any payload without a
+> live `exp` claim. The Next.js signer (`src/features/auth/session.ts`) adds one;
+> if you ever change that signer, keep the claim or every call here will 401.

@@ -9,6 +9,7 @@ import {
   SaveResult,
 } from '../types/memory.types';
 import { DEMO_MEMORIES } from '../data/demoMemories';
+import { enrichmentState } from '../utils/enrichment';
 import { detectContent } from '../utils/urlDetection';
 
 const IS_DEMO = process.env.NEXT_PUBLIC_IS_DEMO_MODE === 'true';
@@ -32,10 +33,11 @@ function buildLocalMemory(input: SaveMemoryInput): MemoryData {
     };
   }
 
-  const { type, title, tags } = detectContent(content);
+  const { type, title, tags, url } = detectContent(content);
   return {
     id: `demo-${Date.now()}`,
-    content,
+    // Store the normalised URL so `instagram.com/reel/x` still embeds and previews.
+    content: type === 'url' ? url : content,
     type,
     title,
     tags,
@@ -67,14 +69,25 @@ function withConnection(memory: MemoryData, otherId: string): MemoryData {
   return { ...memory, linkedMemoryIds: [...new Set([...(memory.linkedMemoryIds ?? []), otherId])] };
 }
 
+/** How often to re-check for links still being read, and how many times. */
+const ENRICHMENT_POLL_MS = 4000;
+const ENRICHMENT_POLL_LIMIT = 6;
+
 export function useMemories() {
   const [memories, setMemories] = useState<MemoryData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [reindexingId, setReindexingId] = useState<string | null>(null);
 
-  const fetchMemories = useCallback(async () => {
-    setIsLoading(true);
+  /**
+   * `silent` refreshes skip the loading state, so background polling for
+   * enrichment never flashes the library's spinner over content the user is
+   * already reading.
+   */
+  const fetchMemories = useCallback(async (options: { silent?: boolean } = {}) => {
+    const silent = options.silent ?? false;
+    if (!silent) setIsLoading(true);
     setError(null);
 
     if (IS_DEMO) {
@@ -88,19 +101,42 @@ export function useMemories() {
       const json: FetchResult = await res.json();
       if (json.success && json.data) {
         setMemories(json.data.memories);
-      } else {
+      } else if (!silent) {
         setError(json.error ?? 'Failed to load memories.');
       }
     } catch {
-      setError('Network error. Please try again.');
+      // A failed background poll is not worth interrupting the user over — the
+      // next one may well succeed, and the stale list is still perfectly usable.
+      if (!silent) setError('Network error. Please try again.');
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
     fetchMemories();
   }, [fetchMemories]);
+
+  // Links are indexed after the save response is sent, so a freshly saved link
+  // arrives as `pending`. Poll until it resolves, then stop. Bounded so a link
+  // that never finishes (service down) cannot poll forever, and ignoring rows that
+  // have already stalled so an old abandoned row can't restart the loop.
+  const pendingCount = memories.filter((m) => enrichmentState(m.enrichment) === 'indexing').length;
+  useEffect(() => {
+    if (IS_DEMO || pendingCount === 0) return;
+
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts += 1;
+      if (attempts > ENRICHMENT_POLL_LIMIT) {
+        clearInterval(interval);
+        return;
+      }
+      fetchMemories({ silent: true });
+    }, ENRICHMENT_POLL_MS);
+
+    return () => clearInterval(interval);
+  }, [pendingCount, fetchMemories]);
 
   const save = useCallback(async (input: SaveMemoryInput): Promise<boolean> => {
     // Notes may be title-only (empty body); links always need content.
@@ -193,5 +229,62 @@ export function useMemories() {
     }
   }, []);
 
-  return { memories, isLoading, error, isSaving, save, update, refresh: fetchMemories };
+  /**
+   * Re-open a link and rebuild its search index, then merge the fresh enrichment
+   * in place. Used by the retry affordance on a link whose first read failed.
+   */
+  const reindex = useCallback(async (id: string): Promise<boolean> => {
+    if (IS_DEMO) return false;
+    setReindexingId(id);
+    setError(null);
+
+    // Show the in-flight state on the card itself while the fetch runs.
+    setMemories((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, enrichment: { status: 'pending' as const } } : m))
+    );
+
+    try {
+      const res = await fetch('/api/memories/reindex', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const json: SaveResult = await res.json();
+      if (json.success && json.data) {
+        const updated = json.data.memory;
+        setMemories((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+        return true;
+      }
+      setError(json.error ?? 'Failed to re-read this link.');
+      // Reflect the failure on the card rather than leaving it stuck on pending.
+      setMemories((prev) =>
+        prev.map((m) =>
+          m.id === id
+            ? { ...m, enrichment: { status: 'failed' as const, error: json.error ?? null } }
+            : m
+        )
+      );
+      return false;
+    } catch {
+      setError('Network error. Please try again.');
+      setMemories((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, enrichment: { status: 'failed' as const } } : m))
+      );
+      return false;
+    } finally {
+      setReindexingId(null);
+    }
+  }, []);
+
+  return {
+    memories,
+    isLoading,
+    error,
+    isSaving,
+    reindexingId,
+    save,
+    update,
+    reindex,
+    refresh: fetchMemories,
+  };
 }

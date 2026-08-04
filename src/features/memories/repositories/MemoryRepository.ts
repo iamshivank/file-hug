@@ -1,7 +1,11 @@
 import { db } from '@/lib/db';
-import { memories } from '@/db/schema';
+import { memories, memoryIndex, type MemoryIndexRow } from '@/db/schema';
 import { eq, inArray, desc, count, and, sql } from 'drizzle-orm';
 import { IMemory } from '@/models/Memory';
+import { MemoryEnrichment } from '@/features/memories/types/memory.types';
+
+/** A memory row plus the link-index row the intelligence service produced for it. */
+export type MemoryWithEnrichment = IMemory & { enrichment: MemoryEnrichment | null };
 
 interface CreateInput {
   content: string;
@@ -16,6 +20,33 @@ interface UpdateInput {
   content?: string;
   title?: string;
   linkedMemoryIds?: string[];
+}
+
+/**
+ * Project an index row into the client-facing shape.
+ *
+ * Deliberately drops `searchText` and `transcript`: they exist to be matched
+ * against server-side and can run to tens of thousands of characters, so shipping
+ * them to the browser would bloat every library fetch for no benefit. Their size
+ * is surfaced as `indexedChars` instead.
+ */
+function toEnrichment(row: MemoryIndexRow | null): MemoryEnrichment | null {
+  if (!row) return null;
+  return {
+    status: row.status,
+    pageTitle: row.pageTitle,
+    description: row.description,
+    siteName: row.siteName,
+    author: row.author,
+    imageUrl: row.imageUrl,
+    faviconUrl: row.faviconUrl,
+    keywords: row.keywords ?? [],
+    hasTranscript: !!row.transcript,
+    indexedChars: row.searchText?.length ?? 0,
+    error: row.error,
+    fetchedAt: row.fetchedAt,
+    updatedAt: row.updatedAt,
+  };
 }
 
 export class MemoryRepository {
@@ -109,6 +140,53 @@ export class MemoryRepository {
       ? await query.where(eq(memories.userId, userId)).orderBy(desc(memories.createdAt)).limit(100)
       : await query.orderBy(desc(memories.createdAt)).limit(100);
     return rows;
+  }
+
+  /**
+   * Like `findAll`, but left-joins each link's index row so the UI can show the
+   * real page title, description and preview image alongside the memory.
+   *
+   * A left join keeps un-indexed memories (and every note) in the result with a
+   * null `enrichment`, and the whole thing stays one round trip.
+   */
+  async findAllWithEnrichment(userId?: string): Promise<MemoryWithEnrichment[]> {
+    const base = db
+      .select({ memory: memories, index: memoryIndex })
+      .from(memories)
+      .leftJoin(memoryIndex, eq(memoryIndex.memoryId, memories.id));
+
+    const rows = userId
+      ? await base.where(eq(memories.userId, userId)).orderBy(desc(memories.createdAt)).limit(100)
+      : await base.orderBy(desc(memories.createdAt)).limit(100);
+
+    return rows.map(({ memory, index }) => ({
+      ...memory,
+      enrichment: toEnrichment(index),
+    }));
+  }
+
+  /**
+   * Record that a link is queued for indexing, so the UI can say "reading this
+   * link…" the moment it is saved rather than looking permanently un-indexed.
+   *
+   * Idempotent, and never downgrades a row that already holds a result — a retry
+   * of an already-`ready` link keeps showing its content while it re-fetches.
+   */
+  async markIndexPending(memoryId: string, userId: string, url: string): Promise<void> {
+    await db
+      .insert(memoryIndex)
+      .values({ memoryId, userId, url, status: 'pending' })
+      .onConflictDoNothing({ target: memoryIndex.memoryId });
+  }
+
+  /** The index row for a single memory, scoped to its owner. */
+  async findEnrichment(memoryId: string, userId: string): Promise<MemoryEnrichment | null> {
+    const [row] = await db
+      .select()
+      .from(memoryIndex)
+      .where(and(eq(memoryIndex.memoryId, memoryId), eq(memoryIndex.userId, userId)))
+      .limit(1);
+    return toEnrichment(row ?? null);
   }
 
   async count(): Promise<number> {

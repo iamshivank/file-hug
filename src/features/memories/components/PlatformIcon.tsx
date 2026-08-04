@@ -64,6 +64,38 @@ export default function PlatformIcon({ platform, type, className = 'w-4 h-4' }: 
           <path d="M2.846 6.887c.03-.295-.083-.586-.303-.784L.303 3.62V3.22H7.26l5.378 11.795 4.728-11.795H24v.4l-1.916 1.837c-.165.126-.247.333-.213.538v13.498c-.034.204.048.411.213.537L23.76 21.8v.4H14.35v-.4l1.937-1.882c.19-.19.19-.246.19-.537V8.395L11.547 22.2h-.727L4.508 8.395v9.256c-.052.385.076.772.347 1.05L7.375 21.8v.4H0v-.4l2.52-3.1c.27-.278.39-.67.33-1.05L2.846 6.887z" />
         </svg>
       );
+    case 'linkedin':
+      return (
+        <svg {...base} viewBox="0 0 24 24" fill="currentColor">
+          <path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM2.4 21.5h5.15V9.5H2.4v12zM9.9 9.5h4.93v1.64h.07a5.4 5.4 0 0 1 4.86-2.67c3.2 0 4.24 2.1 4.24 5.6v7.43h-5.14v-6.59c0-1.57-.03-3.6-2.19-3.6-2.2 0-2.53 1.71-2.53 3.48v6.71H9.9V9.5z" />
+        </svg>
+      );
+    case 'spotify':
+      return (
+        <svg {...base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M7.5 9.5c3-.9 6.4-.5 8.9 1.1" />
+          <path d="M8 13c2.4-.7 5.1-.4 7.1.9" />
+          <path d="M8.6 16.2c1.9-.55 4-.3 5.6.7" />
+        </svg>
+      );
+    case 'chatgpt':
+      return (
+        <svg {...base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 3.2 18.2 6.8v7.2L12 17.6 5.8 14V6.8z" />
+          <path d="M12 3.2v14.4" />
+          <path d="M5.8 6.8 18.2 14" />
+          <path d="M18.2 6.8 5.8 14" />
+        </svg>
+      );
+    case 'claude':
+      return (
+        <svg {...base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
+          <path d="M12 3v18" />
+          <path d="M4.2 7.5l15.6 9" />
+          <path d="M19.8 7.5l-15.6 9" />
+        </svg>
+      );
     default:
       return <Link2 className={className} />;
   }

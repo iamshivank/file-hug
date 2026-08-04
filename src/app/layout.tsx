@@ -20,7 +20,7 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: 'File Hug — Never lose something you wanted to remember',
+  title: 'File Hug : Never lose something you wanted to remember',
   description:
     'Save reels, articles, ChatGPT conversations, memes, links and ideas in one place. Search them later using natural language. Your AI-powered memory for everything you discover online.',
   keywords: [
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     'File Hug',
   ],
   openGraph: {
-    title: 'File Hug — Never lose something you wanted to remember',
+    title: 'File Hug : Never lose something you wanted to remember',
     description:
       'Save reels, articles, ChatGPT conversations, memes, links and ideas in one place. Search them later using natural language.',
     type: 'website',
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'File Hug — Never lose something you wanted to remember',
+    title: 'File Hug : Never lose something you wanted to remember',
     description:
       'Your AI-powered memory for everything you discover online.',
   },

@@ -1,4 +1,5 @@
 import { MemoryData } from '../types/memory.types';
+import { isKnownPlatform, platformLabel } from './platforms';
 
 /** A bucket of link memories that share a platform (or the catch-all "other"). */
 export interface PlatformGroupData {
@@ -9,17 +10,6 @@ export interface PlatformGroupData {
   memories: MemoryData[];
 }
 
-/** Platforms we render as their own named section, in the order they map here. */
-const KNOWN_PLATFORMS: Record<string, string> = {
-  instagram: 'Instagram',
-  youtube: 'YouTube',
-  X: 'X',
-  tiktok: 'TikTok',
-  reddit: 'Reddit',
-  github: 'GitHub',
-  medium: 'Medium',
-};
-
 /** Everything that isn't a recognised platform falls into this bucket. */
 const OTHER_KEY = 'other';
 const OTHER_LABEL = 'Other / Websites';
@@ -27,7 +17,7 @@ const OTHER_LABEL = 'Other / Websites';
 /** The platform word for a link is `tags[0]`; missing/unknown ⇒ the other bucket. */
 function platformKeyOf(memory: MemoryData): string {
   const tag = memory.tags.length > 0 ? memory.tags[0] : null;
-  return tag && tag in KNOWN_PLATFORMS ? tag : OTHER_KEY;
+  return isKnownPlatform(tag) ? tag! : OTHER_KEY;
 }
 
 /**
@@ -50,7 +40,7 @@ export function groupByPlatform(links: MemoryData[]): PlatformGroupData[] {
   for (const [platform, memories] of buckets) {
     groups.push({
       platform,
-      label: platform === OTHER_KEY ? OTHER_LABEL : KNOWN_PLATFORMS[platform],
+      label: platform === OTHER_KEY ? OTHER_LABEL : platformLabel(platform),
       memories,
     });
   }

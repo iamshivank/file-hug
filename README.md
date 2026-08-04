@@ -43,22 +43,22 @@ No folders. No manual organization. Just save and search.
 
 ### Save Links
 
-Store content from platforms such as:
-
-* Instagram
-* YouTube
-* X (Twitter)
-* TikTok
-* Reddit
-* GitHub
-* Medium
-* Any website
+Store content from platforms such as Instagram, YouTube, X, TikTok, Reddit,
+GitHub, Medium, LinkedIn, Threads, Spotify, Substack, Notion, ChatGPT, Claude,
+Twitch, Stack Overflow, arXiv — or any website.
 
 File Hug automatically identifies the platform and content type.
 
 ### Save Notes
 
 Create quick notes, ideas, reminders, and thoughts alongside saved links.
+
+### Reads Your Links
+
+When you save a link, File Hug opens it and reads what's actually there — the real
+title, the description, the article text, even the video transcript — and indexes
+all of it. So you can search for what something *was about*, not just what you
+happened to name it.
 
 ### Smart Organization
 
@@ -71,6 +71,12 @@ Examples:
 * GitHub Repository
 * Reddit Post
 * Personal Note
+
+### Search That Understands
+
+Search blends meaning-based (semantic) matching with keyword matching, across both
+what you saved and what was inside the links. If the search service isn't running,
+the box falls back to plain filtering rather than going dead.
 
 ### Unified Memory Feed
 
@@ -93,14 +99,12 @@ File Hug is evolving into a complete AI memory layer for your digital life.
 
 Planned capabilities include:
 
-* AI-powered semantic search
 * Browser extension for one-click saving
 * Mobile applications
 * ChatGPT conversation imports
 * Automatic content summarization
 * Knowledge graph generation
 * Personalized memory recommendations
-* Cross-platform content understanding
 
 The long-term goal is simple:
 
