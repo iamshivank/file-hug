@@ -189,7 +189,7 @@ async def search_ilike(
             """
             SELECT m.id
             FROM memories m
-            LEFT JOIN memory_index mi ON mi.memory_id = m.id
+            LEFT JOIN memory_index mi ON mi.memory_id = m.id AND mi.user_id = $1
             WHERE m.user_id = $1
               AND (
                 m.title ILIKE $2

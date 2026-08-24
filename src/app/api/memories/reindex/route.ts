@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { indexMemory } from '@/features/memories/services/IntelligenceClient';
-import { memoryRepository } from '@/features/memories/repositories/MemoryRepository';
+import { memoryService } from '@/features/memories/services/MemoryService';
 import { getSession, getSessionToken } from '@/features/auth/session';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -33,18 +32,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const userId = session.user.id;
-    const memory = await memoryRepository.findById(id, userId);
-    if (!memory) {
-      return NextResponse.json({ success: false, error: 'Memory not found.' }, { status: 404 });
-    }
-    if (memory.type !== 'url') {
-      return NextResponse.json(
-        { success: false, error: 'Only links can be indexed.' },
-        { status: 400 }
-      );
-    }
-
     const token = await getSessionToken();
     if (!token) {
       return NextResponse.json(
@@ -53,28 +40,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // `force` because the point of an explicit retry is to redo work that a
-    // ready-row check would otherwise skip.
-    const result = await indexMemory(id, token, { force: true });
-    if (!result) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'The memory intelligence service is unavailable. Try again shortly.',
-        },
-        { status: 502 }
-      );
+    const userId = session.user.id;
+    const result = await memoryService.reindex(id, userId, token);
+
+    if (!result.success) {
+      const status = result.error?.includes('not found') ? 404 :
+                     result.error?.includes('unavailable') ? 502 : 400;
+      return NextResponse.json(result, { status });
     }
 
-    // Read the persisted row back rather than trusting the response shape — this
-    // is what every other client read of this memory will see.
-    const enrichment = await memoryRepository.findEnrichment(id, userId);
-    const refreshed = await memoryRepository.findById(id, userId);
-
-    return NextResponse.json({
-      success: true,
-      data: { memory: { ...(refreshed ?? memory), enrichment } },
-    });
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Memories reindex error:', error);
     return NextResponse.json(
