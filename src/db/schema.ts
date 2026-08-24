@@ -1,17 +1,10 @@
-import { pgTable, serial, varchar, text, timestamp, pgEnum, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, text, timestamp, pgEnum, boolean } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const memoryTypeEnum = pgEnum('memory_type', ['url', 'note']);
 export const planEnum = pgEnum('plan', ['free', 'pro', 'ai']);
 export const subStatusEnum = pgEnum('sub_status', ['active', 'canceled', 'past_due']);
 export const indexStatusEnum = pgEnum('index_status', ['pending', 'ready', 'failed']);
-
-export const waitlist = pgTable('waitlist', {
-  id: serial('id').primaryKey(),
-  name: varchar('name', { length: 100 }).notNull(),
-  email: varchar('email', { length: 255 }).notNull().unique(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
 
 export const users = pgTable('users', {
   id: text('id')
@@ -102,7 +95,6 @@ export const memoryIndex = pgTable('memory_index', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export type WaitlistRow = typeof waitlist.$inferSelect;
 export type MemoryRow = typeof memories.$inferSelect;
 export type MemoryIndexRow = typeof memoryIndex.$inferSelect;
 export type UserRow = typeof users.$inferSelect;

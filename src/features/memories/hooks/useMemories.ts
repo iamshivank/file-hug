@@ -33,14 +33,17 @@ function buildLocalMemory(input: SaveMemoryInput): MemoryData {
     };
   }
 
-  const { type, title, tags, url } = detectContent(content);
+  const detected = detectContent(content);
+  const customTags = (input.tags ?? [])
+    .map((tag) => tag.trim().toLowerCase().replace(/^#/, ''))
+    .filter((tag) => tag.length > 0 && tag.length <= 30);
   return {
     id: `demo-${Date.now()}`,
     // Store the normalised URL so `instagram.com/reel/x` still embeds and previews.
-    content: type === 'url' ? url : content,
-    type,
-    title,
-    tags,
+    content: detected.type === 'url' ? detected.url : content,
+    type: detected.type,
+    title: input.title?.trim() || detected.title,
+    tags: [...new Set([...detected.tags, ...customTags])].slice(0, 10),
     createdAt: new Date().toISOString(),
   };
 }
@@ -114,7 +117,8 @@ export function useMemories() {
   }, []);
 
   useEffect(() => {
-    fetchMemories();
+    const timer = window.setTimeout(fetchMemories, 0);
+    return () => window.clearTimeout(timer);
   }, [fetchMemories]);
 
   // Links are indexed after the save response is sent, so a freshly saved link

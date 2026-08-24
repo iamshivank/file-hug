@@ -14,7 +14,7 @@ File Hug is a SaaS application that acts as an AI-powered memory for everything 
 
 The app is well past the landing page. It has:
 
-- ✅ Landing page (marketing sections + waitlist form)
+- ✅ Redesigned landing page with editorial layouts and a Three.js hero scene
 - ✅ Auth — email/password, Google OAuth, and a client-only demo mode
 - ✅ Dashboard at `/app` — save links and notes, group by platform, connect memories
 - ✅ Link intelligence — saved links are opened, read, and indexed for search
@@ -85,8 +85,7 @@ file-hug/
     │       ├── memories/route.ts        # GET/POST/PATCH memories
     │       ├── memories/reindex/route.ts# POST — re-read one link (synchronous)
     │       ├── intelligence/[...path]/  # Proxy → the FastAPI service
-    │       ├── billing/…                # order, verify, webhook
-    │       └── waitlist/route.ts
+    │       └── billing/…                # order, verify, webhook
     │
     ├── db/schema.ts                    # Drizzle schema — the source of truth for tables
     ├── lib/db.ts                       # Neon pool + drizzle (WebSocket driver, for transactions)
@@ -180,7 +179,6 @@ catch and continue. It cannot run on Vercel; see the service's README for hostin
 | `subscriptions` | Plan + status + Razorpay ids |
 | `memories`      | Links and notes — `content`, `type`, `title`, `tags[]`, `linkedMemoryIds[]` |
 | `memory_index`  | What we learned by opening each link — page title, description, body text, transcript, keywords |
-| `waitlist`      | Landing-page signups |
 
 ### Columns Drizzle does not own
 
@@ -224,10 +222,6 @@ Updates `title`, `content`, and/or `linkedMemoryIds`. Requires a real session
 
 Body `{ id }`. Re-opens the link and rebuilds its index, waiting for the result and
 returning the fresh enrichment. `502` when the service is unreachable.
-
-### `POST /api/waitlist`
-
-Body `{ name, email }`. `201` on success; `400` on validation failure or duplicate.
 
 ### `/api/intelligence/*`
 

@@ -21,6 +21,16 @@ function noteTitleFrom(body: string): string {
   return firstLine.length > 80 ? firstLine.slice(0, 80) + '...' : firstLine || 'Untitled note';
 }
 
+function cleanTags(tags?: string[]): string[] {
+  if (!Array.isArray(tags)) return [];
+  return [...new Set(
+    tags
+      .filter((tag): tag is string => typeof tag === 'string')
+      .map((tag) => tag.trim().toLowerCase().replace(/^#/, ''))
+      .filter((tag) => tag.length > 0 && tag.length <= 30)
+  )].slice(0, 10);
+}
+
 export class MemoryService {
   async save(input: SaveMemoryInput, userId?: string): Promise<SaveResult> {
     // Notes are unlimited and may be title-only (empty body). Handle them first
@@ -88,8 +98,15 @@ export class MemoryService {
     // Detection normalises what was pasted — `instagram.com/reel/x` becomes a real
     // absolute URL — and we store that form so embeds, previews and the indexer
     // all work off a URL they can parse.
-    const { type, title, tags, url } = detectContent(rawContent);
+    const detected = detectContent(rawContent);
+    const { type, url } = detected;
     const content = type === 'url' ? url : rawContent;
+    const customTitle = input.title?.trim();
+    if (customTitle && customTitle.length > 200) {
+      return { success: false, error: 'Title must be under 200 characters.' };
+    }
+    const title = customTitle || detected.title;
+    const tags = [...new Set([...detected.tags, ...cleanTags(input.tags)])].slice(0, 10);
 
     // Enforce the Free-plan link limit server-side (never blocks notes).
     if (type === 'url' && userId) {
