@@ -16,6 +16,16 @@ function noteTitleFrom(body: string): string {
   return firstLine.length > 80 ? firstLine.slice(0, 80) + '...' : firstLine || 'Untitled note';
 }
 
+function cleanTags(tags?: string[]): string[] {
+  if (!Array.isArray(tags)) return [];
+  return [...new Set(
+    tags
+      .filter((tag): tag is string => typeof tag === 'string')
+      .map((tag) => tag.trim().toLowerCase().replace(/^#/, ''))
+      .filter((tag) => tag.length > 0 && tag.length <= 30)
+  )].slice(0, 10);
+}
+
 export class MemoryService {
   async save(input: SaveMemoryInput, userId?: string): Promise<SaveResult> {
     const content = input.content?.trim();
@@ -46,7 +56,14 @@ export class MemoryService {
       return { success: true, data: { memory } };
     }
 
-    const { type, title, tags } = detectContent(content);
+    const detected = detectContent(content);
+    const { type } = detected;
+    const customTitle = input.title?.trim();
+    if (customTitle && customTitle.length > 200) {
+      return { success: false, error: 'Title must be under 200 characters.' };
+    }
+    const title = customTitle || detected.title;
+    const tags = [...new Set([...detected.tags, ...cleanTags(input.tags)])];
 
     // Enforce the Free-plan link limit server-side (never blocks notes).
     if (type === 'url' && userId) {

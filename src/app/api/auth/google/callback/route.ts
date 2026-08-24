@@ -4,6 +4,7 @@ import { exchangeGoogleCode, type GoogleProfile } from '@/features/auth/oauth';
 import { createSession, type SessionUser } from '@/features/auth/session';
 
 const STATE_COOKIE = 'fh_oauth_state';
+const PLAN_COOKIE = 'fh_auth_plan';
 
 /**
  * Upsert the Google user into the `users` table when a DB is configured.
@@ -52,8 +53,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const cookieStore = await cookies();
   const savedState = cookieStore.get(STATE_COOKIE)?.value;
+  const requestedPlan = cookieStore.get(PLAN_COOKIE)?.value;
   // Clear the one-time state cookie regardless of outcome.
   cookieStore.delete(STATE_COOKIE);
+  cookieStore.delete(PLAN_COOKIE);
 
   if (!code || !state || !savedState || state !== savedState) {
     return NextResponse.redirect(new URL('/login?error=oauth', origin));
@@ -74,7 +77,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     };
 
     await createSession(user);
-    return NextResponse.redirect(new URL('/app', origin));
+    const destination = requestedPlan === 'pro' || requestedPlan === 'ai'
+      ? `/app/profile?plan=${requestedPlan}`
+      : '/app';
+    return NextResponse.redirect(new URL(destination, origin));
   } catch (error) {
     console.error('[auth] Google callback error:', error);
     return NextResponse.redirect(new URL('/login?error=oauth', origin));

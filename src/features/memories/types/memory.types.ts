@@ -13,8 +13,10 @@ export interface MemoryData {
 export interface SaveMemoryInput {
   /** A URL (link mode) or the note body (note mode). */
   content: string;
-  /** Optional user-provided title — used in note mode. */
+  /** Optional user-provided title for notes or pasted links. */
   title?: string;
+  /** User-provided searchable tags. Platform tags are added automatically. */
+  tags?: string[];
   /** Explicit mode from the UI. When omitted the service auto-detects. */
   type?: 'url' | 'note';
   /** Saved link memories to connect this note to — note mode only. */

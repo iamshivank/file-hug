@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from 'react';
+import { useState, useRef, FormEvent, KeyboardEvent } from 'react';
 import {
   ArrowUp,
   Loader2,
@@ -31,18 +31,14 @@ function titleCase(s: string): string {
 export default function SaveMemoryForm({ onSave, isSaving, savedLinks }: SaveMemoryFormProps) {
   const [mode, setMode] = useState<Mode>('link');
   const [url, setUrl] = useState('');
+  const [linkTitle, setLinkTitle] = useState('');
+  const [linkTags, setLinkTags] = useState('');
   const [noteTitle, setNoteTitle] = useState('');
   const [noteBody, setNoteBody] = useState('');
   const [linkedIds, setLinkedIds] = useState<string[]>([]);
   const [justSaved, setJustSaved] = useState(false);
-  const [modKey, setModKey] = useState('Ctrl');
+  const modKey = '⌘/Ctrl';
   const urlRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)) {
-      setModKey('⌘');
-    }
-  }, []);
 
   const detection = mode === 'link' && url.trim() ? detectContent(url) : null;
   const isNoteLike = detection?.type === 'note';
@@ -57,7 +53,14 @@ export default function SaveMemoryForm({ onSave, isSaving, savedLinks }: SaveMem
     if (!canSave || isSaving) return;
     const input: SaveMemoryInput =
       mode === 'link'
-        ? { content: url.trim() }
+        ? {
+            content: url.trim(),
+            title: linkTitle.trim() || undefined,
+            tags: linkTags
+              .split(',')
+              .map((tag) => tag.trim())
+              .filter(Boolean),
+          }
         : {
             content: noteBody.trim(),
             title: noteTitle.trim(),
@@ -68,6 +71,8 @@ export default function SaveMemoryForm({ onSave, isSaving, savedLinks }: SaveMem
     const success = await onSave(input);
     if (success) {
       setUrl('');
+      setLinkTitle('');
+      setLinkTags('');
       setNoteTitle('');
       setNoteBody('');
       setLinkedIds([]);
@@ -152,33 +157,59 @@ export default function SaveMemoryForm({ onSave, isSaving, savedLinks }: SaveMem
 
       {/* The bar */}
       {mode === 'link' ? (
-        <div className="composer flex items-center gap-2 pl-4 pr-2 py-2">
-          <div className="text-primary-light shrink-0">
-            <PlatformIcon
-              platform={detection?.platform ?? null}
-              type={isNoteLike ? 'note' : 'url'}
-              className="w-5 h-5"
+        <div className="composer p-2">
+          <div className="flex items-center gap-2 pl-2">
+            <div className="text-primary-light shrink-0">
+              <PlatformIcon
+                platform={detection?.platform ?? null}
+                type={isNoteLike ? 'note' : 'url'}
+                className="w-5 h-5"
+              />
+            </div>
+            <input
+              ref={urlRef}
+              type="text"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="Paste a link — a reel, article, tweet, video…"
+              autoFocus
+              className="flex-1 min-w-0 bg-transparent border-0 outline-none py-2.5 text-base sm:text-lg text-foreground placeholder:text-muted"
             />
+            <button
+              type="button"
+              onClick={handlePaste}
+              aria-label="Paste from clipboard"
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-sm text-muted hover:text-primary-light hover:bg-surface-hover transition-colors shrink-0 cursor-pointer"
+            >
+              <ClipboardPaste className="w-4 h-4" />
+              Paste
+            </button>
+            {sendButton}
           </div>
-          <input
-            ref={urlRef}
-            type="text"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="Paste a link — a reel, article, tweet, video…"
-            autoFocus
-            className="flex-1 min-w-0 bg-transparent border-0 outline-none py-2.5 text-base sm:text-lg text-foreground placeholder:text-muted"
-          />
-          <button
-            type="button"
-            onClick={handlePaste}
-            aria-label="Paste from clipboard"
-            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-sm text-muted hover:text-primary-light hover:bg-surface-hover transition-colors shrink-0 cursor-pointer"
-          >
-            <ClipboardPaste className="w-4 h-4" />
-            Paste
-          </button>
-          {sendButton}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 px-2 pt-2 mt-1 border-t border-border">
+            <label className="flex items-center gap-2 rounded-xl bg-background/60 px-3">
+              <span className="text-[10px] font-semibold tracking-wider text-muted uppercase shrink-0">Name</span>
+              <input
+                type="text"
+                value={linkTitle}
+                onChange={(e) => setLinkTitle(e.target.value)}
+                placeholder="e.g. Camera research"
+                maxLength={200}
+                className="w-full min-w-0 bg-transparent border-0 outline-none py-2.5 text-sm text-foreground placeholder:text-muted/70"
+              />
+            </label>
+            <label className="flex items-center gap-2 rounded-xl bg-background/60 px-3">
+              <span className="text-[10px] font-semibold tracking-wider text-muted uppercase shrink-0">Tags</span>
+              <input
+                type="text"
+                value={linkTags}
+                onChange={(e) => setLinkTags(e.target.value)}
+                placeholder="work, research, later"
+                maxLength={320}
+                className="w-full min-w-0 bg-transparent border-0 outline-none py-2.5 text-sm text-foreground placeholder:text-muted/70"
+              />
+            </label>
+          </div>
         </div>
       ) : (
         <div className="composer p-2">

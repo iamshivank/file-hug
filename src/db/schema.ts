@@ -1,16 +1,9 @@
-import { pgTable, serial, varchar, text, timestamp, pgEnum, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, text, timestamp, pgEnum, boolean } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const memoryTypeEnum = pgEnum('memory_type', ['url', 'note']);
 export const planEnum = pgEnum('plan', ['free', 'pro', 'ai']);
 export const subStatusEnum = pgEnum('sub_status', ['active', 'canceled', 'past_due']);
-
-export const waitlist = pgTable('waitlist', {
-  id: serial('id').primaryKey(),
-  name: varchar('name', { length: 100 }).notNull(),
-  email: varchar('email', { length: 255 }).notNull().unique(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
 
 export const users = pgTable('users', {
   id: text('id')
@@ -20,6 +13,7 @@ export const users = pgTable('users', {
   name: varchar('name', { length: 200 }).notNull(),
   image: text('image'),
   googleId: varchar('google_id', { length: 255 }),
+  passwordHash: text('password_hash'),
   isDemo: boolean('is_demo').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -54,7 +48,6 @@ export const memories = pgTable('memories', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export type WaitlistRow = typeof waitlist.$inferSelect;
 export type MemoryRow = typeof memories.$inferSelect;
 export type UserRow = typeof users.$inferSelect;
 export type SubscriptionRow = typeof subscriptions.$inferSelect;

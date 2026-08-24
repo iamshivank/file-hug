@@ -32,13 +32,16 @@ function buildLocalMemory(input: SaveMemoryInput): MemoryData {
     };
   }
 
-  const { type, title, tags } = detectContent(content);
+  const detected = detectContent(content);
+  const customTags = (input.tags ?? [])
+    .map((tag) => tag.trim().toLowerCase().replace(/^#/, ''))
+    .filter(Boolean);
   return {
     id: `demo-${Date.now()}`,
     content,
-    type,
-    title,
-    tags,
+    type: detected.type,
+    title: input.title?.trim() || detected.title,
+    tags: [...new Set([...detected.tags, ...customTags])].slice(0, 10),
     createdAt: new Date().toISOString(),
   };
 }
@@ -93,7 +96,8 @@ export function useMemories() {
   }, []);
 
   useEffect(() => {
-    fetchMemories();
+    const timer = window.setTimeout(fetchMemories, 0);
+    return () => window.clearTimeout(timer);
   }, [fetchMemories]);
 
   const save = useCallback(async (input: SaveMemoryInput): Promise<boolean> => {
