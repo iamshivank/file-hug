@@ -1,22 +1,18 @@
 import type { Metadata } from 'next';
-import { Inter, Fraunces } from 'next/font/google';
+import { Bricolage_Grotesque, Instrument_Sans } from 'next/font/google';
 import { Analytics } from '@vercel/analytics/next';
 import './globals.css';
 
-const inter = Inter({
+const instrumentSans = Instrument_Sans({
   variable: '--font-inter',
   subsets: ['latin'],
   display: 'swap',
 });
 
-// Warm, soft serif used for display headlines — gives the UI an editorial,
-// hand-designed character instead of the generic sans-only SaaS look.
-const fraunces = Fraunces({
+const bricolage = Bricolage_Grotesque({
   variable: '--font-display',
   subsets: ['latin'],
   display: 'swap',
-  weight: ['400', '500', '600'],
-  style: ['normal', 'italic'],
 });
 
 export const metadata: Metadata = {
@@ -57,7 +53,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${fraunces.variable} h-full antialiased overflow-x-hidden`} suppressHydrationWarning>
+    <html lang="en" className={`${instrumentSans.variable} ${bricolage.variable} h-full antialiased overflow-x-hidden`} suppressHydrationWarning>
       <head>
         {/* Apply a saved theme choice before first paint to avoid a flash. When
             no explicit choice is stored we leave [data-theme] unset so the

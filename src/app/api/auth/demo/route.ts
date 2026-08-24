@@ -11,7 +11,11 @@ const DEMO_USER: SessionUser = {
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   await createSession(DEMO_USER);
-  return NextResponse.redirect(new URL('/app', request.url));
+  const requested = new URL(request.url).searchParams.get('plan');
+  const destination = requested === 'pro' || requested === 'ai'
+    ? `/app/profile?plan=${requested}`
+    : '/app';
+  return NextResponse.redirect(new URL(destination, request.url));
 }
 
 export async function POST(): Promise<NextResponse> {

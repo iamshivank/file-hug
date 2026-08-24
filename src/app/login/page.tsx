@@ -30,7 +30,15 @@ function GoogleIcon() {
   );
 }
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ plan?: string }>;
+}) {
+  const requested = (await searchParams).plan;
+  const plan = requested === 'pro' || requested === 'ai' ? requested : null;
+  const googleHref = plan ? `/api/auth/google?plan=${plan}` : '/api/auth/google';
+
   return (
     <div className="min-h-screen bg-background bg-dots flex flex-col">
       {/* Warm ambient glow */}
@@ -58,7 +66,7 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <CredentialsForm />
+          <CredentialsForm plan={plan} />
 
           <div className="flex items-center gap-3 my-5" aria-hidden="true">
             <div className="flex-1 h-px bg-border-strong" />
@@ -67,7 +75,7 @@ export default function LoginPage() {
           </div>
 
           <a
-            href="/api/auth/google"
+            href={googleHref}
             className="group inline-flex w-full items-center justify-center gap-3 px-5 py-3 bg-surface hover:bg-surface-hover border border-border-strong rounded-xl text-foreground font-medium transition-colors"
           >
             <GoogleIcon />

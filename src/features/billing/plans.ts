@@ -28,6 +28,7 @@ export const PLANS: Record<PlanId, Plan> = {
     features: [
       'Save up to 1,000 links',
       'Unlimited notes',
+      'Custom link names and tags',
       'Fast indexed keyword search',
       'Save from any platform',
     ],
@@ -45,6 +46,7 @@ export const PLANS: Record<PlanId, Plan> = {
     features: [
       'Unlimited link storage',
       'Unlimited notes',
+      'Custom link names and tags',
       'Fast indexed keyword search',
       'Save from any platform',
       'Priority support',
@@ -64,6 +66,7 @@ export const PLANS: Record<PlanId, Plan> = {
       'AI natural-language search across links & notes',
       'Ask questions, get the exact memory',
       'Smart auto-tagging',
+      'Archive supported videos on our servers (coming soon)',
     ],
   },
 };
