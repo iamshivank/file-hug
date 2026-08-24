@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Loader2, LayoutGrid, Link2, NotebookPen, Network, Sparkles } from 'lucide-react';
 import { useMemories } from '../hooks/useMemories';
 import { useSmartSearch } from '../hooks/useSmartSearch';
@@ -60,7 +60,7 @@ export default function MemoryDashboard() {
     filter === 'links' ? searchedLinks : filter === 'notes' ? searchedNotes : searched;
 
   // Platform groups (links only) for the grouped view, after global search.
-  const platformGroups = useMemo(() => groupByPlatform(searchedLinks), [searchedLinks]);
+  const platformGroups = groupByPlatform(searchedLinks);
 
   const memoriesById = new Map(memories.map((m) => [m.id, m]));
   // Every memory's connections, resolved to real memories (undirected graph).

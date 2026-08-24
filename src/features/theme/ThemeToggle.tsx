@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import { Sun, Moon } from 'lucide-react';
 
 type Resolved = 'light' | 'dark';
 
 const STORAGE_KEY = 'fh-theme';
+const THEME_EVENT = 'fh-theme-change';
 
 /** The theme actually showing right now: an explicit choice, else the OS preference. */
 function resolveTheme(): Resolved {
@@ -20,23 +21,21 @@ function resolveTheme(): Resolved {
  * the root layout applies a saved choice before first paint (no flash).
  */
 export default function ThemeToggle({ className = '' }: { className?: string }) {
-  const [mounted, setMounted] = useState(false);
-  const [theme, setTheme] = useState<Resolved>('dark');
-
-  useEffect(() => {
-    setMounted(true);
-    setTheme(resolveTheme());
-
-    // Keep the icon in sync with the OS while the user is still following it.
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const onChange = () => {
-      if (!document.documentElement.getAttribute('data-theme')) {
-        setTheme(mq.matches ? 'dark' : 'light');
-      }
-    };
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
+  const theme = useSyncExternalStore(
+    (onChange) => {
+      // Keep the icon in sync with the OS while the user is still following it,
+      // and with explicit choices made by this toggle.
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+      mq.addEventListener('change', onChange);
+      window.addEventListener(THEME_EVENT, onChange);
+      return () => {
+        mq.removeEventListener('change', onChange);
+        window.removeEventListener(THEME_EVENT, onChange);
+      };
+    },
+    resolveTheme,
+    () => 'dark'
+  );
 
   const toggle = () => {
     const next: Resolved = resolveTheme() === 'dark' ? 'light' : 'dark';
@@ -46,10 +45,9 @@ export default function ThemeToggle({ className = '' }: { className?: string }) 
     } catch {
       /* storage blocked — the toggle still works for this session */
     }
-    setTheme(next);
+    window.dispatchEvent(new Event(THEME_EVENT));
   };
 
-  // Before mount the resolved theme is unknown; show a stable, theme-agnostic icon.
   const isDark = theme === 'dark';
 
   return (
@@ -57,8 +55,8 @@ export default function ThemeToggle({ className = '' }: { className?: string }) 
       type="button"
       onClick={toggle}
       suppressHydrationWarning
-      aria-label={mounted ? `Switch to ${isDark ? 'light' : 'dark'} mode` : 'Toggle theme'}
-      title={mounted ? `Switch to ${isDark ? 'light' : 'dark'} mode` : 'Toggle theme'}
+      aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
+      title={`Switch to ${isDark ? 'light' : 'dark'} mode`}
       className={`w-9 h-9 rounded-lg flex items-center justify-center text-muted hover:text-primary-light hover:bg-surface-hover border border-border transition-colors cursor-pointer ${className}`}
     >
       {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
