@@ -135,10 +135,15 @@ export class MemoryRepository {
   }
 
   async findAll(userId?: string): Promise<IMemory[]> {
-    const query = db.select().from(memories);
-    const rows = userId
-      ? await query.where(eq(memories.userId, userId)).orderBy(desc(memories.createdAt)).limit(100)
-      : await query.orderBy(desc(memories.createdAt)).limit(100);
+    const where = userId
+      ? eq(memories.userId, userId)
+      : sql`user_id IS NULL`;
+    const rows = await db
+      .select()
+      .from(memories)
+      .where(where)
+      .orderBy(desc(memories.createdAt))
+      .limit(100);
     return rows;
   }
 
@@ -150,14 +155,17 @@ export class MemoryRepository {
    * null `enrichment`, and the whole thing stays one round trip.
    */
   async findAllWithEnrichment(userId?: string): Promise<MemoryWithEnrichment[]> {
-    const base = db
+    const where = userId
+      ? eq(memories.userId, userId)
+      : sql`user_id IS NULL`;
+
+    const rows = await db
       .select({ memory: memories, index: memoryIndex })
       .from(memories)
-      .leftJoin(memoryIndex, eq(memoryIndex.memoryId, memories.id));
-
-    const rows = userId
-      ? await base.where(eq(memories.userId, userId)).orderBy(desc(memories.createdAt)).limit(100)
-      : await base.orderBy(desc(memories.createdAt)).limit(100);
+      .leftJoin(memoryIndex, eq(memoryIndex.memoryId, memories.id))
+      .where(where)
+      .orderBy(desc(memories.createdAt))
+      .limit(100);
 
     return rows.map(({ memory, index }) => ({
       ...memory,
