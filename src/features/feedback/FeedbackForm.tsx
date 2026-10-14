@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Bug, CheckCircle2, Heart, Lightbulb, Loader2, MessageCircle } from 'lucide-react';
+import { Bug, CheckCircle2, Heart, Lightbulb, Loader2, MessageCircle, Star } from 'lucide-react';
 import { FEEDBACK_MAX_LENGTH, FEEDBACK_MIN_LENGTH, type FeedbackKind } from './constants';
 
 type Status = 'idle' | 'loading' | 'success' | 'error';
@@ -20,14 +20,43 @@ const PLACEHOLDERS: Record<FeedbackKind, string> = {
   other: 'Tell us anything…',
 };
 
+const RATING_LABELS = ['Poor', 'Meh', 'Okay', 'Good', 'Love it'];
+
 interface FeedbackFormProps {
   source: 'landing' | 'app';
+  /** The page the user came from, e.g. `/app/profile`. */
+  page: string | null;
   defaultEmail: string;
   signedIn: boolean;
 }
 
-export default function FeedbackForm({ source, defaultEmail, signedIn }: FeedbackFormProps) {
+/** What the user was looking at — sent with the report so bugs can be reproduced. */
+function clientContext() {
+  const explicit = document.documentElement.getAttribute('data-theme');
+  const theme =
+    explicit === 'light' || explicit === 'dark'
+      ? explicit
+      : window.matchMedia('(prefers-color-scheme: light)').matches
+        ? 'light'
+        : 'dark';
+  let timezone: string | null = null;
+  try {
+    timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    // Older browsers — leave it out.
+  }
+  return {
+    viewport: `${window.innerWidth}x${window.innerHeight}`,
+    locale: navigator.language,
+    timezone,
+    theme,
+  };
+}
+
+export default function FeedbackForm({ source, page, defaultEmail, signedIn }: FeedbackFormProps) {
   const [kind, setKind] = useState<FeedbackKind>('idea');
+  const [rating, setRating] = useState<number | null>(null);
+  const [hover, setHover] = useState<number | null>(null);
   const [message, setMessage] = useState('');
   const [email, setEmail] = useState(defaultEmail);
   const [website, setWebsite] = useState('');
@@ -47,7 +76,7 @@ export default function FeedbackForm({ source, defaultEmail, signedIn }: Feedbac
       const res = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kind, message, email, source, website }),
+        body: JSON.stringify({ kind, rating, message, email, source, page, website, ...clientContext() }),
       });
       const json = (await res.json()) as { success: boolean; error?: string };
       if (!res.ok || !json.success) {
@@ -74,6 +103,7 @@ export default function FeedbackForm({ source, defaultEmail, signedIn }: Feedbac
           type="button"
           onClick={() => {
             setMessage('');
+            setRating(null);
             setStatus('idle');
           }}
           className="mt-5 text-sm text-primary-light hover:underline cursor-pointer"
@@ -113,6 +143,36 @@ export default function FeedbackForm({ source, defaultEmail, signedIn }: Feedbac
               {label}
             </label>
           ))}
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend className="text-xs font-medium text-muted-light mb-2">
+          How&apos;s File Hug working for you? <span className="text-muted">(optional)</span>
+        </legend>
+        <div className="flex items-center gap-1" onMouseLeave={() => setHover(null)}>
+          {RATING_LABELS.map((label, i) => {
+            const value = i + 1;
+            const lit = (hover ?? rating ?? 0) >= value;
+            return (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setRating(rating === value ? null : value)}
+                onMouseEnter={() => setHover(value)}
+                aria-label={`${value} of 5 — ${label}`}
+                aria-pressed={rating === value}
+                className="p-1 rounded-lg cursor-pointer hover:bg-surface-hover transition-colors"
+              >
+                <Star
+                  className={`w-6 h-6 transition-colors ${lit ? 'text-primary fill-primary' : 'text-muted'}`}
+                />
+              </button>
+            );
+          })}
+          <span className="ml-2 text-xs text-muted min-w-14">
+            {RATING_LABELS[(hover ?? rating ?? 0) - 1] ?? ''}
+          </span>
         </div>
       </fieldset>
 

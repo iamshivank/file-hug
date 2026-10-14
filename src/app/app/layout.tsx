@@ -5,6 +5,7 @@ import { getSession } from '@/features/auth/session';
 import { AuthProvider } from '@/features/auth/AuthProvider';
 import UserMenu from '@/features/auth/UserMenu';
 import ThemeToggle from '@/features/theme/ThemeToggle';
+import FeedbackLink from '@/features/feedback/FeedbackLink';
 
 const IS_DEMO = process.env.NEXT_PUBLIC_IS_DEMO_MODE === 'true';
 
@@ -65,13 +66,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <Link href="/app/profile" className="hover:text-foreground transition-colors">
                 Profile
               </Link>
-              <Link
-                href="/feedback?from=app"
+              <FeedbackLink
+                from="app"
                 className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors"
               >
                 <MessageSquareHeart className="w-4 h-4" />
                 Send feedback
-              </Link>
+              </FeedbackLink>
             </nav>
           </div>
         </footer>

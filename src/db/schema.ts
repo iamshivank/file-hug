@@ -1,4 +1,4 @@
-import { pgTable, varchar, text, timestamp, pgEnum, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, text, timestamp, pgEnum, boolean, integer, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const memoryTypeEnum = pgEnum('memory_type', ['url', 'note']);
@@ -114,22 +114,54 @@ export const sessions = pgTable('sessions', {
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
-});
+}, (t) => [index('sessions_user_id_idx').on(t.userId)]);
 
 export const feedbackKindEnum = pgEnum('feedback_kind', ['bug', 'idea', 'praise', 'other']);
+export const feedbackStatusEnum = pgEnum('feedback_status', [
+  'new',
+  'reviewing',
+  'planned',
+  'done',
+  'wont_fix',
+]);
 
-/** Feedback left from the landing page or the app. Anonymous is allowed. */
+/**
+ * Feedback left from the landing page or the app. Anonymous is allowed.
+ *
+ * Everything needed to act on it is captured at submit time — who sent it (and
+ * on which plan), where they were, and what they were using — so a bug report
+ * can be reproduced without a follow-up. `status` is for triage.
+ */
 export const feedback = pgTable('feedback', {
   id: text('id')
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID()),
-  userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
-  email: varchar('email', { length: 255 }),
   kind: feedbackKindEnum('kind').notNull().default('other'),
+  /** Optional 1–5 "how's File Hug working for you?" */
+  rating: integer('rating'),
   message: text('message').notNull(),
-  /** Where it was sent from, e.g. `landing` or `app`. */
+  status: feedbackStatusEnum('status').notNull().default('new'),
+
+  // Who — null user fields for anonymous visitors.
+  userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+  userName: varchar('user_name', { length: 200 }),
+  /** Reply-to address: what they typed, else their account email. */
+  email: varchar('email', { length: 255 }),
+  plan: planEnum('plan'),
+  isDemo: boolean('is_demo').notNull().default(false),
+
+  // Where — `landing` or `app`, and the page they came from.
   source: varchar('source', { length: 32 }),
+  pageUrl: text('page_url'),
+
+  // What they were using.
+  device: varchar('device', { length: 100 }),
   userAgent: text('user_agent'),
+  viewport: varchar('viewport', { length: 32 }),
+  locale: varchar('locale', { length: 35 }),
+  timezone: varchar('timezone', { length: 64 }),
+  theme: varchar('theme', { length: 16 }),
+
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

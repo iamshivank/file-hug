@@ -12,11 +12,25 @@ import {
   Sparkles,
 } from 'lucide-react';
 import ThemeToggle from '@/features/theme/ThemeToggle';
-import { PLAN_LIST, type Plan } from '@/features/billing/plans';
+import { PLAN_LIST, type Plan, type PlanId } from '@/features/billing/plans';
 import HeroExperience from './hero/HeroExperience';
 import PlatformOrbit from './PlatformOrbit';
 import SearchDemo from './SearchDemo';
 import TiltCard from './TiltCard';
+
+/** The signed-in visitor, resolved on the server. Null for visitors and demo sessions. */
+export interface LandingViewer {
+  name: string;
+  image: string | null;
+  plan: PlanId;
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 function Mark({ size = 15 }: { size?: number }) {
   return (
@@ -26,7 +40,7 @@ function Mark({ size = 15 }: { size?: number }) {
   );
 }
 
-function Nav() {
+function Nav({ viewer }: { viewer: LandingViewer | null }) {
   return (
     <header className="lp-nav">
       <Link href="/" className="lp-brand" aria-label="File Hug home">
@@ -41,12 +55,33 @@ function Nav() {
       </nav>
       <div className="lp-nav-actions">
         <ThemeToggle />
-        <Link href="/login" className="lp-nav-signin">
-          Sign in
-        </Link>
-        <Link href="/login" className="lp-btn lp-btn-primary lp-btn-sm">
-          Get started
-        </Link>
+        {viewer ? (
+          <>
+            <Link href="/app/profile" className="lp-nav-user" title={`Signed in as ${viewer.name}`}>
+              {viewer.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={viewer.image} alt="" width={28} height={28} className="lp-nav-avatar" />
+              ) : (
+                <span className="lp-nav-avatar" aria-hidden="true">
+                  {initials(viewer.name)}
+                </span>
+              )}
+              <span className="lp-nav-user-name">{viewer.name.split(/\s+/)[0]}</span>
+            </Link>
+            <Link href="/app" className="lp-btn lp-btn-primary lp-btn-sm">
+              Open library
+            </Link>
+          </>
+        ) : (
+          <>
+            <Link href="/login" className="lp-nav-signin">
+              Sign in
+            </Link>
+            <Link href="/login" className="lp-btn lp-btn-primary lp-btn-sm">
+              Get started
+            </Link>
+          </>
+        )}
       </div>
     </header>
   );
@@ -131,12 +166,30 @@ function MethodSection() {
   );
 }
 
-function PlanCard({ plan }: { plan: Plan }) {
+/** Where a plan's button goes, and what it says, for this visitor. */
+function planCta(plan: Plan, viewer: LandingViewer | null): { href: string; label: string } {
+  if (!viewer) {
+    return plan.id === 'free'
+      ? { href: '/login', label: 'Start free' }
+      : { href: `/login?plan=${plan.id}`, label: `Choose ${plan.name}` };
+  }
+  if (plan.id === viewer.plan) return { href: '/app/profile', label: 'Your current plan' };
+  if (plan.id === 'free') return { href: '/app', label: 'Open library' };
+  return { href: `/app/profile?plan=${plan.id}`, label: `Switch to ${plan.name}` };
+}
+
+function PlanCard({ plan, viewer }: { plan: Plan; viewer: LandingViewer | null }) {
+  const cta = planCta(plan, viewer);
+  const isCurrent = viewer?.plan === plan.id;
   return (
     <TiltCard className={`lp-plan ${plan.highlight ? 'lp-plan-featured' : ''}`} max={6}>
       <div className="lp-plan-head lp-depth-1">
         <h3>{plan.name}</h3>
-        {plan.highlight && <span className="lp-plan-badge">Most chosen</span>}
+        {isCurrent ? (
+          <span className="lp-plan-badge">Your plan</span>
+        ) : (
+          plan.highlight && <span className="lp-plan-badge">Most chosen</span>
+        )}
       </div>
       <p className="lp-plan-tagline lp-depth-1">{plan.tagline}</p>
       <p className="lp-plan-price lp-depth-2">
@@ -162,23 +215,23 @@ function PlanCard({ plan }: { plan: Plan }) {
         })}
       </ul>
       <Link
-        href={plan.id === 'free' ? '/login' : `/login?plan=${plan.id}`}
-        className={`lp-btn ${plan.highlight ? 'lp-btn-primary' : 'lp-btn-ghost'} lp-plan-cta lp-depth-1`}
+        href={cta.href}
+        className={`lp-btn ${plan.highlight && !isCurrent ? 'lp-btn-primary' : 'lp-btn-ghost'} lp-plan-cta lp-depth-1`}
       >
-        {plan.id === 'free' ? 'Start free' : `Choose ${plan.name}`}
-        <ArrowRight size={16} aria-hidden="true" />
+        {cta.label}
+        {isCurrent ? <Check size={16} aria-hidden="true" /> : <ArrowRight size={16} aria-hidden="true" />}
       </Link>
     </TiltCard>
   );
 }
 
-export default function LandingPage() {
+export default function LandingPage({ viewer = null }: { viewer?: LandingViewer | null }) {
   return (
     <div className="lp-root">
-      <Nav />
+      <Nav viewer={viewer} />
 
       <main>
-        <HeroExperience />
+        <HeroExperience signedIn={!!viewer} />
 
         <MethodSection />
 
@@ -217,7 +270,7 @@ export default function LandingPage() {
           </div>
           <div className="lp-plans">
             {PLAN_LIST.map((plan) => (
-              <PlanCard key={plan.id} plan={plan} />
+              <PlanCard key={plan.id} plan={plan} viewer={viewer} />
             ))}
           </div>
         </section>
@@ -228,17 +281,27 @@ export default function LandingPage() {
           <h2 id="final-title" className="lp-final-title">
             Never lose something you <em>wanted to remember.</em>
           </h2>
-          <div className="lp-final-actions">
-            <Link href="/login" className="lp-btn lp-btn-primary lp-btn-lg">
-              Get started free <ArrowRight size={18} aria-hidden="true" />
-            </Link>
-            <a href="/api/auth/demo" className="lp-btn lp-btn-ghost lp-btn-lg">
-              <Play size={16} aria-hidden="true" /> Try the live demo
-            </a>
-          </div>
-          <p className="lp-final-note">
-            Already saving? <Link href="/app">Open your library</Link>
-          </p>
+          {viewer ? (
+            <div className="lp-final-actions">
+              <Link href="/app" className="lp-btn lp-btn-primary lp-btn-lg">
+                Open your library <ArrowRight size={18} aria-hidden="true" />
+              </Link>
+            </div>
+          ) : (
+            <>
+              <div className="lp-final-actions">
+                <Link href="/login" className="lp-btn lp-btn-primary lp-btn-lg">
+                  Get started free <ArrowRight size={18} aria-hidden="true" />
+                </Link>
+                <a href="/api/auth/demo" className="lp-btn lp-btn-ghost lp-btn-lg">
+                  <Play size={16} aria-hidden="true" /> Try the live demo
+                </a>
+              </div>
+              <p className="lp-final-note">
+                Already saving? <Link href="/app">Open your library</Link>
+              </p>
+            </>
+          )}
         </section>
       </main>
 
@@ -252,8 +315,8 @@ export default function LandingPage() {
           <a href="#features">Features</a>
           <a href="#pricing">Pricing</a>
           <Link href="/app">Library</Link>
-          <Link href="/login">Sign in</Link>
-          <Link href="/feedback?from=landing">Feedback</Link>
+          {viewer ? <Link href="/app/profile">Profile</Link> : <Link href="/login">Sign in</Link>}
+          <Link href="/feedback?from=landing&page=%2F">Feedback</Link>
         </nav>
       </footer>
     </div>

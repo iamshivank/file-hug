@@ -12,9 +12,15 @@ export const metadata: Metadata = {
 export default async function FeedbackPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string }>;
+  searchParams: Promise<{ from?: string; page?: string }>;
 }) {
-  const from = (await searchParams).from === 'app' ? 'app' : 'landing';
+  const params = await searchParams;
+  const from = params.from === 'app' ? 'app' : 'landing';
+  // Only same-site paths — this ends up in the stored report and the back link.
+  const page =
+    typeof params.page === 'string' && params.page.startsWith('/') && !params.page.startsWith('//')
+      ? params.page.slice(0, 500)
+      : null;
   const session = await getSession();
   const user = session && !session.user.isDemo ? session.user : null;
 
@@ -24,7 +30,7 @@ export default async function FeedbackPage({
 
       <header className="relative z-10 max-w-5xl w-full mx-auto px-6 py-6">
         <Link
-          href={from === 'app' ? '/app' : '/'}
+          href={page ?? (from === 'app' ? '/app' : '/')}
           className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -44,7 +50,7 @@ export default async function FeedbackPage({
             </p>
           </div>
 
-          <FeedbackForm source={from} defaultEmail={user?.email ?? ''} signedIn={!!user} />
+          <FeedbackForm source={from} page={page} defaultEmail={user?.email ?? ''} signedIn={!!user} />
         </div>
       </main>
     </div>

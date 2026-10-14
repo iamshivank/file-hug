@@ -62,7 +62,7 @@ const CHIP_ICONS: Record<CardKind, LucideIcon> = {
 const BASE_VAULT = 128;
 const STATS = { words: 3871, transcripts: 2, keywords: 46 };
 
-export default function HeroExperience() {
+export default function HeroExperience({ signedIn = false }: { signedIn?: boolean }) {
   const reduced = useReducedMotion();
   const compact = useMediaQuery('(max-width: 760px), (pointer: coarse), (max-aspect-ratio: 1/1)');
   const theme = useResolvedTheme();
@@ -232,12 +232,20 @@ export default function HeroExperience() {
               and reads every link, then finds it again when you describe it in your own words.
             </p>
             <div className="lp-hero-actions">
-              <Link href="/login" className="lp-btn lp-btn-primary">
-                Start free <ArrowRight size={17} aria-hidden="true" />
-              </Link>
-              <a href="/api/auth/demo" className="lp-btn lp-btn-ghost">
-                <Play size={15} aria-hidden="true" /> Try the live demo
-              </a>
+              {signedIn ? (
+                <Link href="/app" className="lp-btn lp-btn-primary">
+                  Open your library <ArrowRight size={17} aria-hidden="true" />
+                </Link>
+              ) : (
+                <>
+                  <Link href="/login" className="lp-btn lp-btn-primary">
+                    Start free <ArrowRight size={17} aria-hidden="true" />
+                  </Link>
+                  <a href="/api/auth/demo" className="lp-btn lp-btn-ghost">
+                    <Play size={15} aria-hidden="true" /> Try the live demo
+                  </a>
+                </>
+              )}
             </div>
             <p className="lp-hint">
               <Hand size={15} aria-hidden="true" />
@@ -290,8 +298,8 @@ export default function HeroExperience() {
                 </p>
               </div>
             </div>
-            <Link href="/login" className="lp-btn lp-btn-primary lp-recall-cta">
-              Build your memory <ArrowRight size={17} aria-hidden="true" />
+            <Link href={signedIn ? '/app' : '/login'} className="lp-btn lp-btn-primary lp-recall-cta">
+              {signedIn ? 'Search your memory' : 'Build your memory'} <ArrowRight size={17} aria-hidden="true" />
             </Link>
           </div>
         </div>
