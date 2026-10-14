@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Heart, ArrowLeft } from 'lucide-react';
+import { Heart, ArrowLeft, MessageSquareHeart } from 'lucide-react';
 import { getSession } from '@/features/auth/session';
 import { AuthProvider } from '@/features/auth/AuthProvider';
 import UserMenu from '@/features/auth/UserMenu';
@@ -22,10 +22,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <header className="glass-strong sticky top-0 z-50 border-b border-border">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
-                <Heart className="w-3.5 h-3.5 text-on-accent fill-on-accent" />
-              </div>
-              <span className="font-display text-lg text-foreground">File Hug</span>
+              <Link
+                href="/"
+                aria-label="File Hug home"
+                className="flex items-center gap-2.5 rounded-lg hover:opacity-85 transition-opacity"
+              >
+                <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
+                  <Heart className="w-3.5 h-3.5 text-on-accent fill-on-accent" />
+                </div>
+                <span className="font-display text-lg text-foreground">File Hug</span>
+              </Link>
               {showDemoBadge && (
                 <span className="text-[11px] px-2 py-0.5 bg-primary/15 text-primary-light rounded-full font-medium border border-border-strong">
                   Demo
@@ -48,6 +54,27 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </header>
 
         <main className="bg-dots min-h-[calc(100vh-3.5rem)]">{children}</main>
+
+        <footer className="border-t border-border">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 flex items-center justify-between gap-4 flex-wrap text-sm text-muted">
+            <p>© {new Date().getFullYear()} File Hug</p>
+            <nav aria-label="Footer" className="flex items-center gap-5">
+              <Link href="/" className="hover:text-foreground transition-colors">
+                Home
+              </Link>
+              <Link href="/app/profile" className="hover:text-foreground transition-colors">
+                Profile
+              </Link>
+              <Link
+                href="/feedback?from=app"
+                className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors"
+              >
+                <MessageSquareHeart className="w-4 h-4" />
+                Send feedback
+              </Link>
+            </nav>
+          </div>
+        </footer>
       </div>
     </AuthProvider>
   );

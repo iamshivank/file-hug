@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2, LayoutGrid, Link2, NotebookPen, Network, Sparkles } from 'lucide-react';
+import { Loader2, LayoutGrid, Link2, NotebookPen, Network, Sparkles, ArrowUpDown } from 'lucide-react';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { useMemories } from '../hooks/useMemories';
 import { useSmartSearch } from '../hooks/useSmartSearch';
 import { MemoryData } from '../types/memory.types';
 import { groupByPlatform } from '../utils/grouping';
+import { SORT_OPTIONS, sortMemories, type SortKey } from '../utils/sort';
 import SaveMemoryForm from './SaveMemoryForm';
 import MemoryCard from './MemoryCard';
 import EmptyState from './EmptyState';
@@ -39,6 +40,8 @@ export default function MemoryDashboard() {
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
   const [grouped, setGrouped] = useState(false);
+  // null = automatic: best match while searching, newest first otherwise.
+  const [sortChoice, setSortChoice] = useState<SortKey | null>(null);
   // The clicked card's rect travels with the open request so previews can flip
   // open from where the user clicked. Previews resolve their memory by id so
   // they reflect edits live as `memories` updates.
@@ -60,10 +63,15 @@ export default function MemoryDashboard() {
     usedLinkIndex,
     notice: searchNotice,
   } = useSmartSearch(memories, query, { localOnly: isDemo });
-  const searchedLinks = searched.filter((m) => m.type === 'url');
-  const searchedNotes = searched.filter((m) => m.type === 'note');
+  const isQuerying = query.trim().length > 0;
+  // "Best match" only exists while searching; outside a search it means newest.
+  const sortKey: SortKey =
+    sortChoice === 'relevance' || sortChoice === null ? (isQuerying ? 'relevance' : 'newest') : sortChoice;
+  const sorted = sortMemories(searched, sortKey);
+  const searchedLinks = sorted.filter((m) => m.type === 'url');
+  const searchedNotes = sorted.filter((m) => m.type === 'note');
   const flatList =
-    filter === 'links' ? searchedLinks : filter === 'notes' ? searchedNotes : searched;
+    filter === 'links' ? searchedLinks : filter === 'notes' ? searchedNotes : sorted;
 
   // Platform groups (links only) for the grouped view, after global search.
   const platformGroups = groupByPlatform(searchedLinks);
@@ -162,6 +170,22 @@ export default function MemoryDashboard() {
                 ))}
               </div>
 
+              <label className="relative inline-flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-xl border border-border bg-surface text-sm font-medium text-muted hover:text-foreground focus-within:border-border-strong transition-colors">
+                <ArrowUpDown className="w-4 h-4 shrink-0" aria-hidden="true" />
+                <span className="sr-only">Sort by</span>
+                <select
+                  value={sortKey}
+                  onChange={(e) => setSortChoice(e.target.value as SortKey)}
+                  className="bg-transparent text-sm font-medium text-foreground pr-1 cursor-pointer focus:outline-none"
+                >
+                  {SORT_OPTIONS.filter((o) => !o.searchOnly || isQuerying).map((option) => (
+                    <option key={option.key} value={option.key} className="bg-surface text-foreground">
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <button
                 type="button"
                 onClick={() => setGrouped((g) => !g)}
@@ -212,7 +236,7 @@ export default function MemoryDashboard() {
             />
 
             {/* Tell the user how much understanding is behind these results. */}
-            {query.trim().length > 0 && (
+            {isQuerying && (
               <div className="flex items-center gap-2 min-h-4 -mt-2 text-[11px] text-muted">
                 {isSearching ? (
                   <>
@@ -226,7 +250,11 @@ export default function MemoryDashboard() {
                     <span>
                       {searched.length} {searched.length === 1 ? 'result' : 'results'}
                     </span>
-                    {MODE_LABELS[searchMode] && <span>· {MODE_LABELS[searchMode]}</span>}
+                    {sortKey === 'relevance' ? (
+                      MODE_LABELS[searchMode] && <span>· {MODE_LABELS[searchMode]}</span>
+                    ) : (
+                      <span>· Sorted {SORT_OPTIONS.find((o) => o.key === sortKey)?.label.toLowerCase()}</span>
+                    )}
                     {usedLinkIndex && (
                       <span className="inline-flex items-center gap-1 text-primary-light">
                         <Sparkles className="w-3 h-3" />

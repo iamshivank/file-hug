@@ -45,7 +45,9 @@ export default function CredentialsForm({ plan }: { plan?: 'pro' | 'ai' | null }
         return;
       }
 
-      router.push(plan ? `/app/profile?plan=${plan}` : '/app');
+      // replace, not push: /login must not sit in history behind the app, or the
+      // browser's Back button lands on a sign-in form while you're signed in.
+      router.replace(plan ? `/app/profile?plan=${plan}` : '/app');
       router.refresh();
     } catch {
       setStatus('error');

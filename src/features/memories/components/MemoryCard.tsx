@@ -1,6 +1,6 @@
 'use client';
 
-import { Clock, Pencil, FileText, Loader2, Captions, AlertCircle } from 'lucide-react';
+import { Clock, Pencil, FileText, Loader2, Captions, AlertCircle, ExternalLink } from 'lucide-react';
 import { MemoryData } from '../types/memory.types';
 import { enrichmentState } from '../utils/enrichment';
 import PlatformIcon from './PlatformIcon';
@@ -16,6 +16,16 @@ function timeAgo(dateInput: string | Date): string {
   const days = Math.floor(hours / 24);
   if (days < 30) return `${days}d ago`;
   return date.toLocaleDateString();
+}
+
+/** Only real web links get an "open" button — never `javascript:` and friends. */
+function openableHref(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : null;
+  } catch {
+    return null;
+  }
 }
 
 interface MemoryCardProps {
@@ -50,6 +60,8 @@ export default function MemoryCard({
     ...(isUrl ? memory.tags.slice(2) : memory.tags.filter((t) => t !== 'note')),
     ...(memory.enrichment?.keywords ?? []),
   ])].slice(0, 3);
+
+  const openHref = isUrl ? openableHref(memory.content) : null;
 
   const enrichment = memory.enrichment;
   const state = enrichmentState(enrichment);
@@ -125,6 +137,21 @@ export default function MemoryCard({
             <Clock className="w-3 h-3" />
             <span>{timeAgo(memory.createdAt)}</span>
           </div>
+          {openHref && (
+            // Opens the original straight away; the card itself still opens the preview.
+            <a
+              href={openHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+              aria-label="Open link in a new tab"
+              title="Open link"
+              className="w-7 h-7 -mr-1 rounded-lg flex items-center justify-center text-muted hover:text-primary-light hover:bg-surface-hover transition-colors"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          )}
           {onEdit && (
             <button
               type="button"

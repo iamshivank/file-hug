@@ -1,234 +1,260 @@
 import Link from 'next/link';
 import {
-  ArrowDown,
   ArrowRight,
-  Bookmark,
   Check,
-  CirclePlay,
+  CircleCheck,
   CloudDownload,
+  FileText,
   Heart,
   Link2,
+  Play,
   Search,
   Sparkles,
-  Tag,
 } from 'lucide-react';
+import ThemeToggle from '@/features/theme/ThemeToggle';
 import { PLAN_LIST, type Plan } from '@/features/billing/plans';
-import LandingScene from './LandingScene';
+import HeroExperience from './hero/HeroExperience';
+import PlatformOrbit from './PlatformOrbit';
+import SearchDemo from './SearchDemo';
+import TiltCard from './TiltCard';
 
-const savedItems = [
-  { type: 'VIDEO', title: 'A perfect 12-minute focaccia', source: 'youtube.com', tag: 'cook later' },
-  { type: 'ARTICLE', title: 'The small-web renaissance', source: 'theverge.com', tag: 'research' },
-  { type: 'THREAD', title: 'How tiny teams ship faster', source: 'x.com', tag: 'work' },
-];
-
-function Mark() {
+function Mark({ size = 15 }: { size?: number }) {
   return (
-    <span className="landing-mark" aria-hidden="true">
-      <Heart size={15} strokeWidth={2.4} />
+    <span className="lp-mark" aria-hidden="true">
+      <Heart size={size} strokeWidth={2.4} />
     </span>
+  );
+}
+
+function Nav() {
+  return (
+    <header className="lp-nav">
+      <Link href="/" className="lp-brand" aria-label="File Hug home">
+        <Mark />
+        <span>File Hug</span>
+      </Link>
+      <nav aria-label="Main navigation" className="lp-nav-links">
+        <a href="#method">How it works</a>
+        <a href="#features">Search</a>
+        <a href="#platforms">Platforms</a>
+        <a href="#pricing">Pricing</a>
+      </nav>
+      <div className="lp-nav-actions">
+        <ThemeToggle />
+        <Link href="/login" className="lp-nav-signin">
+          Sign in
+        </Link>
+        <Link href="/login" className="lp-btn lp-btn-primary lp-btn-sm">
+          Get started
+        </Link>
+      </div>
+    </header>
+  );
+}
+
+function MethodSection() {
+  return (
+    <section id="method" className="lp-section" aria-labelledby="method-title">
+      <div className="lp-section-head">
+        <p className="lp-kicker">02 / How it works</p>
+        <h2 id="method-title" className="lp-h2">
+          Save messy. <em>Find precisely.</em>
+        </h2>
+        <p className="lp-lead">
+          Built for the way people actually browse: fast, across a dozen apps, with no time to
+          organise anything in the moment.
+        </p>
+      </div>
+
+      <ol className="lp-steps">
+        <li>
+          <TiltCard className="lp-step">
+            <span className="lp-step-num lp-depth-1">01</span>
+            <div className="lp-step-visual lp-depth-2">
+              <div className="lp-mini-composer">
+                <Link2 size={15} aria-hidden="true" />
+                <span className="lp-mini-url">instagram.com/reel/C9xQ2…</span>
+                <span className="lp-mini-save">Save</span>
+              </div>
+              <div className="lp-mini-detect">
+                <span className="lp-pill">Instagram · Reel</span>
+                <span className="lp-pill lp-pill-quiet">#weekend</span>
+              </div>
+            </div>
+            <h3 className="lp-depth-1">Drop it in</h3>
+            <p className="lp-depth-1">
+              Paste any link or jot a note. File Hug recognises the platform and keeps your own name
+              and tags alongside it.
+            </p>
+          </TiltCard>
+        </li>
+        <li>
+          <TiltCard className="lp-step">
+            <span className="lp-step-num lp-depth-1">02</span>
+            <div className="lp-step-visual lp-depth-2">
+              <ul className="lp-mini-checks">
+                <li><CircleCheck size={14} aria-hidden="true" /> Title &amp; description</li>
+                <li><CircleCheck size={14} aria-hidden="true" /> Transcript · 214 words</li>
+                <li><CircleCheck size={14} aria-hidden="true" /> Keywords · sourdough, levain</li>
+                <li className="lp-mini-reading"><span className="lp-spinner" aria-hidden="true" /> Reading page text…</li>
+              </ul>
+            </div>
+            <h3 className="lp-depth-1">We read it</h3>
+            <p className="lp-depth-1">
+              In the background, every link is opened and read: page text, video transcripts and
+              metadata, indexed for words and for meaning.
+            </p>
+          </TiltCard>
+        </li>
+        <li>
+          <TiltCard className="lp-step">
+            <span className="lp-step-num lp-depth-1">03</span>
+            <div className="lp-step-visual lp-depth-2">
+              <div className="lp-mini-composer">
+                <Search size={15} aria-hidden="true" />
+                <span className="lp-mini-url">bread video from last month</span>
+              </div>
+              <div className="lp-mini-result">
+                <Sparkles size={13} aria-hidden="true" />
+                <span>72-hour sourdough, the lazy way</span>
+              </div>
+            </div>
+            <h3 className="lp-depth-1">Call it back</h3>
+            <p className="lp-depth-1">
+              Ask in plain words. Search runs across titles, tags, notes and everything inside the
+              links themselves.
+            </p>
+          </TiltCard>
+        </li>
+      </ol>
+    </section>
   );
 }
 
 function PlanCard({ plan }: { plan: Plan }) {
   return (
-    <article className={`price-card ${plan.highlight ? 'price-card-featured' : ''}`}>
-      <div>
-        <div className="price-card-head">
-          <span className="kicker">{plan.name}</span>
-          {plan.highlight && <span className="popular-label">MOST CHOSEN</span>}
-        </div>
-        <p className="price-tagline">{plan.tagline}</p>
-        <p className="price-value">
-          {plan.priceInr === 0 ? '₹0' : `₹${plan.priceInr}`}
-          <span>/{plan.period === 'forever' ? 'forever' : 'month'}</span>
-        </p>
+    <TiltCard className={`lp-plan ${plan.highlight ? 'lp-plan-featured' : ''}`} max={6}>
+      <div className="lp-plan-head lp-depth-1">
+        <h3>{plan.name}</h3>
+        {plan.highlight && <span className="lp-plan-badge">Most chosen</span>}
       </div>
-      <ul>
-        {plan.features.map((feature) => (
-          <li key={feature}>
-            {feature.includes('Archive supported videos') ? <CloudDownload size={15} /> : <Check size={15} />}
-            <span>{feature.replace(' (coming soon)', '')}{feature.includes('(coming soon)') && <em>COMING SOON</em>}</span>
-          </li>
-        ))}
+      <p className="lp-plan-tagline lp-depth-1">{plan.tagline}</p>
+      <p className="lp-plan-price lp-depth-2">
+        ₹{plan.priceInr}
+        <span>/{plan.period === 'forever' ? 'forever' : 'month'}</span>
+      </p>
+      <ul className="lp-plan-features">
+        {plan.features.map((feature) => {
+          const soon = feature.includes('(coming soon)');
+          return (
+            <li key={feature}>
+              {feature.includes('Archive supported videos') ? (
+                <CloudDownload size={15} aria-hidden="true" />
+              ) : (
+                <Check size={15} aria-hidden="true" />
+              )}
+              <span>
+                {feature.replace(' (coming soon)', '')}
+                {soon && <em>Coming soon</em>}
+              </span>
+            </li>
+          );
+        })}
       </ul>
-      <Link href={plan.id === 'free' ? '/login' : `/login?plan=${plan.id}`} className="price-cta">
+      <Link
+        href={plan.id === 'free' ? '/login' : `/login?plan=${plan.id}`}
+        className={`lp-btn ${plan.highlight ? 'lp-btn-primary' : 'lp-btn-ghost'} lp-plan-cta lp-depth-1`}
+      >
         {plan.id === 'free' ? 'Start free' : `Choose ${plan.name}`}
-        <ArrowRight size={16} />
+        <ArrowRight size={16} aria-hidden="true" />
       </Link>
-    </article>
+    </TiltCard>
   );
 }
 
 export default function LandingPage() {
   return (
-    <div className="landing-shell">
-      <header className="landing-nav">
-        <Link href="/" className="brand-lockup" aria-label="File Hug home">
-          <Mark />
-          <span>FILE HUG</span>
-        </Link>
-        <nav aria-label="Main navigation">
-          <a href="#method">How it works</a>
-          <a href="#features">Features</a>
-          <a href="#pricing">Pricing</a>
-        </nav>
-        <Link href="/login" className="nav-cta">
-          Sign in <ArrowRight size={15} />
-        </Link>
-      </header>
+    <div className="lp-root">
+      <Nav />
 
       <main>
-        <section className="landing-hero">
-          <div className="hero-copy">
-            <p className="hero-index">[ YOUR OTHER MEMORY ]</p>
-            <h1>
-              Keep the internet<br />
-              you <span>meant</span> to<br />
-              remember.
-            </h1>
-            <p className="hero-deck">
-              One considered home for the videos, links, notes and half-finished thoughts
-              you&apos;ll actually want again.
-            </p>
-            <div className="hero-actions">
-              <Link href="/login" className="primary-cta">
-                Get started <ArrowRight size={18} />
-              </Link>
-              <a href="#method" className="text-cta">
-                <CirclePlay size={18} /> See how it works
-              </a>
-            </div>
-            <div className="hero-note">
-              <span>01</span>
-              <p>No folders to maintain.<br />No perfect system required.</p>
-            </div>
-          </div>
-          <div className="hero-art">
-            <div className="hero-stamp">SAVE NOW<br />FIND LATER</div>
-            <LandingScene />
-            <div className="scene-caption">
-              <span>3D / LIVE</span>
-              <p>Your scattered tabs,<br />finally held together.</p>
-            </div>
-          </div>
-          <a href="#method" className="scroll-cue" aria-label="Scroll to how it works">
-            <ArrowDown size={17} /> SCROLL TO UNPACK
-          </a>
+        <HeroExperience />
+
+        <MethodSection />
+
+        <section id="features" className="lp-section lp-section-band" aria-label="Live search demo">
+          <SearchDemo />
         </section>
 
-        <div className="ticker" aria-hidden="true">
-          <div>
-            <span>REELS</span><i>✦</i><span>ARTICLES</span><i>✦</i><span>THREADS</span><i>✦</i>
-            <span>RECIPES</span><i>✦</i><span>IDEAS</span><i>✦</i><span>VIDEOS</span><i>✦</i>
-          </div>
-        </div>
-
-        <section id="method" className="method-section">
-          <div className="section-number">02 / THE METHOD</div>
-          <div className="method-heading">
-            <h2>Save messy.<br /><span>Find precisely.</span></h2>
-            <p>
-              File Hug is built for the way people actually browse: quickly, across platforms,
-              with no time to organise everything in the moment.
-            </p>
-          </div>
-
-          <div className="method-grid">
-            <article>
-              <span className="step-number">01</span>
-              <div className="step-icon"><Link2 size={22} /></div>
-              <h3>Drop it in</h3>
-              <p>Paste any link or write a note. Give the link a useful name and your own tags while it&apos;s fresh.</p>
-            </article>
-            <article className="method-invert">
-              <span className="step-number">02</span>
-              <div className="step-icon"><Tag size={22} /></div>
-              <h3>Make it yours</h3>
-              <p>“Camera research” is more useful than a URL. Tags keep your language attached to every save.</p>
-            </article>
-            <article>
-              <span className="step-number">03</span>
-              <div className="step-icon"><Search size={22} /></div>
-              <h3>Call it back</h3>
-              <p>Search titles, tags, notes, platforms and links from one fast, forgiving search box.</p>
-            </article>
+        <section id="platforms" className="lp-section" aria-labelledby="platforms-title">
+          <div className="lp-platforms">
+            <div className="lp-section-head lp-section-head-tight">
+              <p className="lp-kicker">04 / Everywhere you browse</p>
+              <h2 id="platforms-title" className="lp-h2">
+                If it has a link, <em>it has a home.</em>
+              </h2>
+              <p className="lp-lead">
+                Reels, threads, repos, chats, playlists, plus the notes you write about them. Spin
+                the ring. Every one of these is recognised, previewed and read.
+              </p>
+              <ul className="lp-proof">
+                <li><FileText size={15} aria-hidden="true" /> Notes and links connect to each other</li>
+                <li><Play size={15} aria-hidden="true" /> Videos play inline, right in your library</li>
+                <li><Sparkles size={15} aria-hidden="true" /> Grouped by platform automatically</li>
+              </ul>
+            </div>
+            <PlatformOrbit />
           </div>
         </section>
 
-        <section id="features" className="product-section">
-          <div className="product-copy">
-            <p className="section-number">03 / BUILT FOR RECALL</p>
-            <h2>A library that<br />speaks <span>your language.</span></h2>
-            <p className="product-deck">
-              Search “that orange chair” instead of remembering which app, account or month it came from.
-            </p>
-            <ul className="feature-list">
-              <li><b>A</b><span><strong>Name every save</strong>Turn raw URLs into cues your brain recognises.</span></li>
-              <li><b>B</b><span><strong>Tag in your own words</strong>Add context like “client”, “weekend” or “buy later”.</span></li>
-              <li><b>C</b><span><strong>Connect notes and links</strong>Keep the thought beside the thing that started it.</span></li>
-            </ul>
+        <section id="pricing" className="lp-section" aria-labelledby="pricing-title">
+          <div className="lp-section-head lp-section-head-center">
+            <p className="lp-kicker">05 / Pricing</p>
+            <h2 id="pricing-title" className="lp-h2">
+              Start small. <em>Keep everything.</em>
+            </h2>
+            <p className="lp-lead">Clear limits, no annual lock-in, and a genuinely useful free plan.</p>
           </div>
-
-          <div className="library-window">
-            <div className="window-bar">
-              <span className="mini-brand"><Mark /> FILE HUG</span>
-              <span>LIBRARY / 128</span>
-            </div>
-            <div className="search-demo"><Search size={18} /><span>weekend things to cook</span><kbd>⌘ K</kbd></div>
-            <div className="saved-grid">
-              {savedItems.map((item, index) => (
-                <article key={item.title} className={index === 0 ? 'saved-card-active' : ''}>
-                  <div className={`saved-thumb saved-thumb-${index + 1}`}><Bookmark size={18} /></div>
-                  <span className="saved-type">{item.type}</span>
-                  <h3>{item.title}</h3>
-                  <p>{item.source}</p>
-                  <span className="saved-tag">#{item.tag}</span>
-                </article>
-              ))}
-            </div>
-            <div className="result-line"><Sparkles size={15} /> 3 things you saved match this thought</div>
+          <div className="lp-plans">
+            {PLAN_LIST.map((plan) => (
+              <PlanCard key={plan.id} plan={plan} />
+            ))}
           </div>
         </section>
 
-        <section className="archive-section">
-          <div className="archive-badge">COMING SOON / AI PLAN</div>
-          <CloudDownload className="archive-icon" strokeWidth={1.25} />
-          <div>
-            <h2>The link can disappear.<br /><span>The video doesn&apos;t have to.</span></h2>
-            <p>
-              AI members will be able to download supported videos and keep a private copy on
-              File Hug&apos;s servers—original context, custom name and tags included.
-            </p>
+        <section className="lp-final" aria-labelledby="final-title">
+          <div className="lp-final-glow" aria-hidden="true" />
+          <p className="lp-kicker">Close the tabs</p>
+          <h2 id="final-title" className="lp-final-title">
+            Never lose something you <em>wanted to remember.</em>
+          </h2>
+          <div className="lp-final-actions">
+            <Link href="/login" className="lp-btn lp-btn-primary lp-btn-lg">
+              Get started free <ArrowRight size={18} aria-hidden="true" />
+            </Link>
+            <a href="/api/auth/demo" className="lp-btn lp-btn-ghost lp-btn-lg">
+              <Play size={16} aria-hidden="true" /> Try the live demo
+            </a>
           </div>
-          <Link href="/login?plan=ai" className="archive-cta">
-            Get AI for ₹199/month <ArrowRight size={18} />
-          </Link>
-        </section>
-
-        <section id="pricing" className="pricing-section">
-          <div className="pricing-intro">
-            <p className="section-number">04 / PICK YOUR SHELF</p>
-            <h2>Start small.<br /><span>Keep everything.</span></h2>
-            <p>Clear limits, no annual lock-in, and a useful free plan.</p>
-          </div>
-          <div className="pricing-grid">
-            {PLAN_LIST.map((plan) => <PlanCard key={plan.id} plan={plan} />)}
-          </div>
-        </section>
-
-        <section className="final-cta-section">
-          <p>[ CLOSE THE TABS ]</p>
-          <h2>Your next good find<br />deserves a way back.</h2>
-          <Link href="/login" className="final-cta">
-            <span>Get started</span><ArrowRight size={28} />
-          </Link>
+          <p className="lp-final-note">
+            Already saving? <Link href="/app">Open your library</Link>
+          </p>
         </section>
       </main>
 
-      <footer className="landing-footer">
-        <div className="brand-lockup"><Mark /><span>FILE HUG</span></div>
+      <footer className="lp-footer">
+        <Link href="/" className="lp-brand" aria-label="File Hug home">
+          <Mark size={13} />
+          <span>File Hug</span>
+        </Link>
         <p>Made for tabs worth keeping. © {new Date().getFullYear()}</p>
-        <div><a href="#features">Features</a><a href="#pricing">Pricing</a><Link href="/login">Sign in</Link></div>
+        <nav aria-label="Footer">
+          <a href="#features">Features</a>
+          <a href="#pricing">Pricing</a>
+          <Link href="/app">Library</Link>
+          <Link href="/login">Sign in</Link>
+          <Link href="/feedback?from=landing">Feedback</Link>
+        </nav>
       </footer>
     </div>
   );

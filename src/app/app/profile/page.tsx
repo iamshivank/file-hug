@@ -8,6 +8,7 @@ import { getSession } from '@/features/auth/session';
 import { getUserPlan } from '@/features/billing/subscription';
 import { PLANS } from '@/features/billing/plans';
 import UpgradeOptions from './UpgradeOptions';
+import ActiveSessions from './ActiveSessions';
 
 export const metadata: Metadata = {
   title: 'File Hug — Your Profile',
@@ -135,6 +136,8 @@ export default async function ProfilePage() {
           <UpgradeOptions currentPlan={planId} userName={user.name} userEmail={user.email} />
         </Suspense>
       </section>
+
+      {!user.isDemo && <ActiveSessions />}
     </div>
   );
 }
