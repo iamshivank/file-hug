@@ -13,7 +13,7 @@ const MIN_QUERY_LENGTH = 2;
 const DEBOUNCE_MS = 250;
 
 /** Which signals produced the ranking, mirrored from the service's response. */
-export type SearchMode = 'hybrid' | 'semantic' | 'fts' | 'ilike' | 'local';
+export type SearchMode = 'ai' | 'hybrid' | 'semantic' | 'fts' | 'ilike' | 'local';
 
 export interface SmartSearchState {
   /** Memories matching the query, best first. Everything when the query is blank. */
@@ -29,6 +29,7 @@ export interface SmartSearchState {
 }
 
 interface ServerSearchResponse {
+  notice?: string | null;
   mode?: string;
   used_link_index?: boolean;
   results?: { id: string }[];
@@ -36,6 +37,7 @@ interface ServerSearchResponse {
 
 /** A completed server search, tagged with the query it answers. */
 interface Ranking {
+  notice: string | null;
   query: string;
   ids: string[];
   mode: SearchMode;
@@ -49,11 +51,11 @@ interface Failure {
 }
 
 function isSearchMode(value: string): value is Exclude<SearchMode, 'local'> {
-  return value === 'hybrid' || value === 'semantic' || value === 'fts' || value === 'ilike';
+  return value === 'ai' || value === 'hybrid' || value === 'semantic' || value === 'fts' || value === 'ilike';
 }
 
-function isSearchable(query: string): boolean {
-  return !IS_DEMO && query.length >= MIN_QUERY_LENGTH;
+function isSearchable(query: string, localOnly: boolean): boolean {
+  return !IS_DEMO && !localOnly && query.length >= MIN_QUERY_LENGTH;
 }
 
 /**
@@ -71,7 +73,12 @@ function isSearchable(query: string): boolean {
  * inert by construction — a slow answer for an earlier query simply never
  * matches again — instead of relying on cleanup ordering.
  */
-export function useSmartSearch(memories: MemoryData[], query: string): SmartSearchState {
+export function useSmartSearch(
+  memories: MemoryData[],
+  query: string,
+  /** `localOnly` — never ask the server (a demo session has no server-side library). */
+  { localOnly = false }: { localOnly?: boolean } = {}
+): SmartSearchState {
   const [ranking, setRanking] = useState<Ranking | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [searchingQuery, setSearchingQuery] = useState<string | null>(null);
@@ -80,9 +87,10 @@ export function useSmartSearch(memories: MemoryData[], query: string): SmartSear
   const [unavailable, setUnavailable] = useState(false);
 
   const trimmed = query.trim();
+  const libraryVersion = memories.map(m => `${m.id}:${m.updatedAt}:${m.enrichment?.status}:${m.enrichment?.updatedAt}`).join('|');
 
   useEffect(() => {
-    if (unavailable || !isSearchable(trimmed)) return;
+    if (unavailable || !isSearchable(trimmed, localOnly)) return;
 
     const controller = new AbortController();
     const timer = setTimeout(async () => {
@@ -94,6 +102,8 @@ export function useSmartSearch(memories: MemoryData[], query: string): SmartSear
         );
 
         if (!res.ok) {
+          if (controller.signal.aborted) return;
+          setRanking(null);
           // Local filtering has the user covered in every case, so the only
           // question is whether to say anything:
           //   503 — intelligence isn't configured for this deployment. Expected
@@ -106,14 +116,16 @@ export function useSmartSearch(memories: MemoryData[], query: string): SmartSear
           }
           setFailure({
             query: trimmed,
-            notice:
-              res.status === 502 ? 'Smart search is offline — showing basic matches.' : null,
+            notice: res.status === 502 ? 'Smart search is offline — showing basic matches.' : null,
           });
           return;
         }
 
         const json: ServerSearchResponse = await res.json();
+        if (controller.signal.aborted) return;
+        setFailure(null);
         setRanking({
+          notice: json.notice ?? null,
           query: trimmed,
           ids: (json.results ?? []).map((result) => result.id),
           mode: json.mode && isSearchMode(json.mode) ? json.mode : 'local',
@@ -122,6 +134,7 @@ export function useSmartSearch(memories: MemoryData[], query: string): SmartSear
       } catch (error) {
         // AbortError is the expected outcome of superseding a request.
         if (error instanceof DOMException && error.name === 'AbortError') return;
+        setRanking(null);
         setFailure({
           query: trimmed,
           notice: 'Smart search is offline — showing basic matches.',
@@ -135,7 +148,7 @@ export function useSmartSearch(memories: MemoryData[], query: string): SmartSear
       clearTimeout(timer);
       controller.abort();
     };
-  }, [trimmed, unavailable]);
+  }, [trimmed, unavailable, libraryVersion, localOnly]);
 
   // Server state only counts while it still answers what is typed.
   const activeRanking = ranking?.query === trimmed ? ranking : null;
@@ -151,9 +164,9 @@ export function useSmartSearch(memories: MemoryData[], query: string): SmartSear
 
   return {
     results,
-    isSearching: !unavailable && searchingQuery === trimmed && isSearchable(trimmed),
+    isSearching: !unavailable && searchingQuery === trimmed && isSearchable(trimmed, localOnly),
     mode: activeRanking?.mode ?? 'local',
     usedLinkIndex: activeRanking?.usedLinkIndex ?? false,
-    notice: activeFailure?.notice ?? null,
+    notice: activeRanking?.notice ?? activeFailure?.notice ?? null,
   };
 }

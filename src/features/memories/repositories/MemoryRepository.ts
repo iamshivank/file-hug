@@ -116,7 +116,7 @@ export class MemoryRepository {
       WHERE id = ${id}
         AND user_id = ${userId}
         AND NOT (${otherId} = ANY(linked_memory_ids))
-        AND array_length(linked_memory_ids, 1) < 25
+        AND cardinality(linked_memory_ids) < 25
     `);
   }
 
@@ -142,8 +142,7 @@ export class MemoryRepository {
       .select()
       .from(memories)
       .where(where)
-      .orderBy(desc(memories.createdAt))
-      .limit(100);
+      .orderBy(desc(memories.createdAt));
     return rows;
   }
 
@@ -164,8 +163,7 @@ export class MemoryRepository {
       .from(memories)
       .leftJoin(memoryIndex, eq(memoryIndex.memoryId, memories.id))
       .where(where)
-      .orderBy(desc(memories.createdAt))
-      .limit(100);
+      .orderBy(desc(memories.createdAt));
 
     return rows.map(({ memory, index }) => ({
       ...memory,
@@ -185,6 +183,31 @@ export class MemoryRepository {
       .insert(memoryIndex)
       .values({ memoryId, userId, url, status: 'pending' })
       .onConflictDoNothing({ target: memoryIndex.memoryId });
+  }
+
+  async resetIndex(memoryId: string, userId: string, url: string): Promise<void> {
+    await db.insert(memoryIndex).values({ memoryId, userId, url, status: 'pending' })
+      .onConflictDoUpdate({ target: memoryIndex.memoryId, set: {
+        url, status: 'pending', pageTitle: null, description: null, siteName: null,
+        author: null, imageUrl: null, faviconUrl: null, transcript: null,
+        keywords: [], searchText: null, embeddingModel: null, error: null,
+        fetchedAt: null, updatedAt: new Date(),
+      }, setWhere: eq(memoryIndex.userId, userId) });
+  }
+
+  /** Drop a link's index row (owner-scoped) — used when its URL changes while indexing is off. */
+  async deleteIndex(memoryId: string, userId: string): Promise<void> {
+    await db
+      .delete(memoryIndex)
+      .where(and(eq(memoryIndex.memoryId, memoryId), eq(memoryIndex.userId, userId)));
+  }
+
+  async markIndexFailed(memoryId: string, userId: string): Promise<void> {
+    await db.update(memoryIndex).set({ status: 'failed',
+      error: 'Link indexing could not finish. Check the intelligence service and retry.',
+      updatedAt: new Date(),
+    }).where(and(eq(memoryIndex.memoryId, memoryId), eq(memoryIndex.userId, userId),
+      eq(memoryIndex.status, 'pending')));
   }
 
   /** The index row for a single memory, scoped to its owner. */

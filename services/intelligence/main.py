@@ -10,6 +10,7 @@ prefix, so routers are mounted at the app root here.
 
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 
@@ -21,11 +22,35 @@ from config import get_settings
 from routers import dashboard, extract, link_index, search
 
 
+logger = logging.getLogger("intelligence")
+
+
+async def _check_embedding_dims() -> None:
+    """Warn loudly when EMBED_DIM can't fit the database's vector(N) columns.
+
+    The migrations fix the column size; EMBED_DIM only controls what we produce.
+    A mismatch makes every vector write/query fail, so surface it at boot.
+    """
+    expected = get_settings().EMBED_DIM
+    for table in ("memory_index", "memories"):
+        try:
+            actual = await db.embedding_column_dim(table)
+        except Exception:  # missing extension/table: the routes degrade on their own
+            continue
+        if actual is not None and actual != expected:
+            logger.error(
+                "EMBED_DIM=%s but %s.embedding is vector(%s); semantic indexing "
+                "will fail until they match (see AI_SETUP.md).",
+                expected, table, actual,
+            )
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Create the DB pool on startup, close it on shutdown."""
     await db.init_pool()
     try:
+        await _check_embedding_dims()
         yield
     finally:
         await db.close_pool()
@@ -39,10 +64,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_origins = [o.strip() for o in settings.ALLOWED_ORIGIN.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.ALLOWED_ORIGIN],
-    allow_credentials=True,
+    allow_origins=_origins,
+    # Starlette answers a credentialed request under "*" by echoing the caller's
+    # Origin, i.e. any site could read authenticated responses. Never combine them.
+    allow_credentials="*" not in _origins,
     allow_methods=["GET", "POST"],
     allow_headers=["Authorization", "Content-Type", "Cookie"],
 )

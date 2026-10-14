@@ -3,10 +3,11 @@ uvicorn[standard]>=0.30
 httpx>=0.27
 asyncpg>=0.29
 beautifulsoup4>=4.12
-youtube-transcript-api>=0.6
+youtube-transcript-api>=1.0,<2
 pydantic>=2.7
 pydantic-settings>=2.3
 python-dotenv>=1.0
 numpy>=1.26
-# Optional — only required if OPENAI_API_KEY is set (OpenAIEmbedder).
-openai>=1.30
+# Required: ai.py imports openai at startup; it is only *called* when OPENAI_API_KEY is set.
+openai>=1.68,<3
+tiktoken>=0.8

@@ -45,9 +45,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const { db } = await import('@/lib/db');
     const { users } = await import('@/db/schema');
-    const { eq } = await import('drizzle-orm');
+    const { sql } = await import('drizzle-orm');
 
-    const existing = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    const existing = await db.select().from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
     if (existing.length > 0) {
       return NextResponse.json(
         { success: false, error: 'An account with this email already exists. Try signing in.' },
@@ -76,6 +76,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({ success: true, data: { user } }, { status: 201 });
   } catch (error) {
+    // Two sign-ups for the same email can both pass the existence check above;
+    // the unique index rejects the second one (Postgres 23505). Report it as
+    // the duplicate it is, not a server error. Drizzle may wrap the driver error.
+    const code =
+      (error as { code?: string } | null)?.code ??
+      (error as { cause?: { code?: string } } | null)?.cause?.code;
+    if (code === '23505') {
+      return NextResponse.json(
+        { success: false, error: 'An account with this email already exists. Try signing in.' },
+        { status: 400 }
+      );
+    }
     console.error('[auth] Signup error:', error);
     return NextResponse.json(
       { success: false, error: 'Something went wrong. Please try again.' },

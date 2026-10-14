@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Loader2, LayoutGrid, Link2, NotebookPen, Network, Sparkles } from 'lucide-react';
+import { useAuth } from '@/features/auth/AuthProvider';
 import { useMemories } from '../hooks/useMemories';
 import { useSmartSearch } from '../hooks/useSmartSearch';
 import { MemoryData } from '../types/memory.types';
@@ -21,6 +22,7 @@ const IS_DEMO = process.env.NEXT_PUBLIC_IS_DEMO_MODE === 'true';
 
 /** Human wording for how the current results were ranked. */
 const MODE_LABELS: Record<string, string> = {
+  ai: 'Ranked by AI relevance',
   hybrid: 'Ranked by meaning + keywords',
   semantic: 'Ranked by meaning',
   fts: 'Ranked by keywords',
@@ -28,8 +30,12 @@ const MODE_LABELS: Record<string, string> = {
 };
 
 export default function MemoryDashboard() {
+  // A demo session is client-only even when the deployment has a database: the
+  // API ignores demo users, so it would show an empty library and refuse saves.
+  const { user } = useAuth();
+  const isDemo = IS_DEMO || !!user?.isDemo;
   const { memories, isLoading, error, isSaving, reindexingId, save, update, reindex } =
-    useMemories();
+    useMemories({ localOnly: isDemo });
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
   const [grouped, setGrouped] = useState(false);
@@ -53,7 +59,7 @@ export default function MemoryDashboard() {
     mode: searchMode,
     usedLinkIndex,
     notice: searchNotice,
-  } = useSmartSearch(memories, query);
+  } = useSmartSearch(memories, query, { localOnly: isDemo });
   const searchedLinks = searched.filter((m) => m.type === 'url');
   const searchedNotes = searched.filter((m) => m.type === 'note');
   const flatList =
@@ -321,7 +327,7 @@ export default function MemoryDashboard() {
           onClose={() => setPreview(null)}
           onOpenNote={openNoteFromLink}
           onSave={update}
-          onReindex={IS_DEMO ? undefined : reindex}
+          onReindex={isDemo ? undefined : reindex}
           isReindexing={reindexingId === previewMemory.id}
         />
       )}

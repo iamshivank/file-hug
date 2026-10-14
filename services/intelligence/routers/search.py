@@ -1,13 +1,20 @@
 """Hybrid search over the current user's memories.
 
-Fuses up to four ranked signals with Reciprocal Rank Fusion (RRF, k=60):
+Fuses up to three ranked signals with Reciprocal Rank Fusion (RRF, k=60):
 
 * ``fts`` — full-text over what the user saved (``memories.search_tsv``).
-* ``semantic`` — pgvector cosine distance over ``memories.embedding``.
 * ``index_fts`` — full-text over content extracted from the link itself
   (``memory_index.search_tsv``: real page title, description, body text,
   transcript, keywords).
-* ``index_semantic`` — pgvector over ``memory_index.embedding``.
+* ``index_semantic`` — pgvector over ``memory_index.embedding``, only rows whose
+  ``embedding_model`` matches the active embedder (needs ``OPENAI_API_KEY``).
+
+``memories.embedding`` is deliberately not searched: those vectors carry no model
+provenance, so they can't safely be compared with the current query vector.
+
+With ``OPENAI_API_KEY`` set, the fused candidates are then judged by the chat
+model (:func:`ai.rerank`); the response mode becomes ``ai`` and unrelated
+candidates are dropped. If that call fails, the RRF order is used instead.
 
 The two index signals are what let "that article about pricing tiers" find a
 saved link whose URL and platform label say nothing about pricing. A memory
@@ -16,7 +23,7 @@ is exactly the desired bias: matching both the URL and the page content is
 stronger evidence than matching either alone.
 
 Graceful degradation, in order:
-* No embeddings for the user (or no pgvector) → full-text signals only.
+* No API key, no indexed vectors (or no pgvector) → full-text signals only.
 * Link index empty or absent (migration 002 not run) → saved-content signals only.
 * Nothing from any full-text/semantic signal → case-insensitive ILIKE fallback,
   which also covers the extracted metadata.
@@ -32,6 +39,8 @@ import db
 from auth import SessionUser, get_current_user
 from embeddings import get_embedder
 from schemas import SearchResponse, SearchResult
+from config import get_settings
+from ai import rerank
 
 router = APIRouter()
 
@@ -60,7 +69,7 @@ def _rrf_fuse(
 
 @router.get("/search", response_model=SearchResponse)
 async def search(
-    q: str = Query(..., min_length=1, description="Natural language query."),
+    q: str = Query(..., min_length=1, max_length=1000, description="Natural language query."),
     limit: int = Query(20, ge=1, le=100),
     user: SessionUser = Depends(get_current_user),
 ) -> SearchResponse:
@@ -70,9 +79,10 @@ async def search(
         return SearchResponse(query=q, count=0, mode="fts", results=[])
 
     # Fetch a wider candidate pool than the final limit so fusion has material.
-    pool_size = min(limit * 3, 100)
+    pool_size = min(max(limit * 3, 40), 100)
 
     ranked_lists: dict[str, list[str]] = {}
+    notice = None if get_settings().OPENAI_API_KEY else 'AI is not configured. Showing keyword matches.'
 
     # --- Full-text over saved title + content -----------------------------
     try:
@@ -92,31 +102,24 @@ async def search(
         ranked_lists["index_fts"] = [r["id"] for r in index_fts_rows]
 
     # --- Semantic signals (only worth embedding the query if vectors exist) ---
-    try:
-        has_memory_vectors = await db.user_has_embeddings(user.id)
-    except Exception:
-        has_memory_vectors = False
+    # Legacy memory vectors have no model provenance. Use the link index only.
+    idx_rows = []
     try:
         has_index_vectors = await db.user_has_index_embeddings(user.id)
     except Exception:
         has_index_vectors = False
+    if get_settings().OPENAI_API_KEY and not has_index_vectors:
+        notice = 'No AI-indexed links yet. Re-read existing links or run the link backfill.'
 
-    if has_memory_vectors or has_index_vectors:
+    if get_settings().OPENAI_API_KEY and has_index_vectors:
         try:
             embedder = get_embedder()
             query_vec = await embedder.embed(query_text)
         except Exception:
             query_vec = None
+            notice = 'AI search is temporarily unavailable. Showing keyword matches.'
 
         if query_vec is not None:
-            if has_memory_vectors:
-                try:
-                    sem_rows = await db.search_semantic(user.id, query_vec, pool_size)
-                    if sem_rows:
-                        ranked_lists["semantic"] = [r["id"] for r in sem_rows]
-                except Exception:
-                    # Missing pgvector / dimension mismatch / codec issue.
-                    pass
             if has_index_vectors:
                 try:
                     idx_rows = await db.search_index_semantic(
@@ -125,7 +128,7 @@ async def search(
                     if idx_rows:
                         ranked_lists["index_semantic"] = [r["id"] for r in idx_rows]
                 except Exception:
-                    pass
+                    notice = 'Semantic search is unavailable. Check database migrations and re-index links.'
 
     # --- Determine effective mode & fuse ----------------------------------
     mode: str
@@ -154,19 +157,39 @@ async def search(
             mode=mode,
             used_link_index=used_link_index,
             results=[],
+            notice=notice,
         )
 
     # Order by fused score, take the top `limit`.
     ordered_ids = sorted(fused.items(), key=lambda kv: kv[1][0], reverse=True)
-    top = ordered_ids[:limit]
+    top = ordered_ids[:min(max(limit, 40), 100)]
     top_ids = [mem_id for mem_id, _ in top]
 
     # Fetch full rows (scoped to the user) and assemble results in fused order.
     rows_by_id = await db.fetch_memories_by_ids(user.id, top_ids)
     try:
-        snippets = await db.fetch_index_snippets(user.id, top_ids)
+        snippets = await db.fetch_index_snippets(user.id, top_ids, length=1800)
     except Exception:
         snippets = {}
+
+    if get_settings().OPENAI_API_KEY:
+        try:
+            candidates = [{'id': mem_id, 'title': rows_by_id[mem_id]['title'],
+                           'content': rows_by_id[mem_id]['content'][:1500],
+                           'tags': list(rows_by_id[mem_id]['tags'] or []),
+                           'context': snippets.get(mem_id, '')[:1800]}
+                          for mem_id in top_ids if mem_id in rows_by_id]
+            matches = await rerank(query_text, candidates)
+            top = [(m.id, (m.relevance / 100, fused[m.id][1] + ['ai'])) for m in matches]
+            mode = 'ai'
+        except Exception:
+            notice = 'AI relevance ranking is unavailable. Showing retrieval matches.'
+            # Without AI filtering, omit weak vector-only matches.
+            semantic_distances = {r['id']: r['distance'] for r in idx_rows}
+            top = [(mid, data) for mid, data in top
+                   if any(s not in ('semantic', 'index_semantic') for s in data[1])
+                   or semantic_distances.get(mid, 1) <= 0.65]
+    top = top[:limit]
 
     results: list[SearchResult] = []
     for mem_id, (score, matched) in top:
@@ -193,4 +216,5 @@ async def search(
         mode=mode,
         used_link_index=used_link_index,
         results=results,
+        notice=notice,
     )

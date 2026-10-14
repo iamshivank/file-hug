@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   MemoryData,
+  MemoryEnrichment,
   SaveMemoryInput,
   UpdateMemoryInput,
   FetchResult,
@@ -72,16 +73,46 @@ function withConnection(memory: MemoryData, otherId: string): MemoryData {
   return { ...memory, linkedMemoryIds: [...new Set([...(memory.linkedMemoryIds ?? []), otherId])] };
 }
 
+/**
+ * Put `updated` into the list and mirror its connection changes onto the other
+ * side, the way the server does. Without the mirror, connecting a note to a link
+ * only showed up on the note until the next full reload.
+ */
+function withUpdatedMemory(list: MemoryData[], updated: MemoryData, prevLinks: string[]): MemoryData[] {
+  const nextLinks = updated.linkedMemoryIds ?? [];
+  const added = nextLinks.filter((id) => !prevLinks.includes(id));
+  const removed = prevLinks.filter((id) => !nextLinks.includes(id));
+  return list.map((m) => {
+    if (m.id === updated.id) return updated;
+    if (added.includes(m.id)) return withConnection(m, updated.id);
+    if (removed.includes(m.id)) {
+      return { ...m, linkedMemoryIds: (m.linkedMemoryIds ?? []).filter((x) => x !== updated.id) };
+    }
+    return m;
+  });
+}
+
 /** How often to re-check for links still being read, and how many times. */
 const ENRICHMENT_POLL_MS = 4000;
-const ENRICHMENT_POLL_LIMIT = 6;
+const ENRICHMENT_POLL_LIMIT = 75;
 
-export function useMemories() {
+/**
+ * @param options.localOnly Keep everything in the browser, as in demo mode. A
+ *   demo *session* (in a deployment that otherwise uses the database) must set
+ *   this: the API ignores demo users, so reads come back empty and writes are
+ *   refused.
+ */
+export function useMemories(options: { localOnly?: boolean } = {}) {
+  const isDemo = IS_DEMO || (options.localOnly ?? false);
   const [memories, setMemories] = useState<MemoryData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [reindexingId, setReindexingId] = useState<string | null>(null);
+  // Bumped on every local change. A background poll that started before a
+  // change would otherwise land after it and overwrite it with older data — a
+  // just-saved memory vanishing, or a reindex spinner snapping back.
+  const localVersion = useRef(0);
 
   /**
    * `silent` refreshes skip the loading state, so background polling for
@@ -90,18 +121,23 @@ export function useMemories() {
    */
   const fetchMemories = useCallback(async (options: { silent?: boolean } = {}) => {
     const silent = options.silent ?? false;
-    if (!silent) setIsLoading(true);
-    setError(null);
+    if (!silent) {
+      setIsLoading(true);
+      // Background polls must not wipe an error the user hasn't read yet.
+      setError(null);
+    }
 
-    if (IS_DEMO) {
+    if (isDemo) {
       setMemories(DEMO_MEMORIES);
       setIsLoading(false);
       return;
     }
 
+    const startedAt = localVersion.current;
     try {
       const res = await fetch('/api/memories');
       const json: FetchResult = await res.json();
+      if (silent && localVersion.current !== startedAt) return;
       if (json.success && json.data) {
         setMemories(json.data.memories);
       } else if (!silent) {
@@ -114,7 +150,7 @@ export function useMemories() {
     } finally {
       if (!silent) setIsLoading(false);
     }
-  }, []);
+  }, [isDemo]);
 
   useEffect(() => {
     const timer = window.setTimeout(fetchMemories, 0);
@@ -127,7 +163,7 @@ export function useMemories() {
   // have already stalled so an old abandoned row can't restart the loop.
   const pendingCount = memories.filter((m) => enrichmentState(m.enrichment) === 'indexing').length;
   useEffect(() => {
-    if (IS_DEMO || pendingCount === 0) return;
+    if (isDemo || pendingCount === 0) return;
 
     let attempts = 0;
     const interval = setInterval(() => {
@@ -140,7 +176,7 @@ export function useMemories() {
     }, ENRICHMENT_POLL_MS);
 
     return () => clearInterval(interval);
-  }, [pendingCount, fetchMemories]);
+  }, [pendingCount, fetchMemories, isDemo]);
 
   const save = useCallback(async (input: SaveMemoryInput): Promise<boolean> => {
     // Notes may be title-only (empty body); links always need content.
@@ -153,14 +189,11 @@ export function useMemories() {
     setIsSaving(true);
     setError(null);
 
-    if (IS_DEMO) {
+    if (isDemo) {
       const newMemory = buildLocalMemory(input);
-      const links = newMemory.linkedMemoryIds ?? [];
-      setMemories((prev) => [
-        newMemory,
-        // Mirror the new memory's connections onto its targets.
-        ...prev.map((m) => (links.includes(m.id) ? withConnection(m, newMemory.id) : m)),
-      ]);
+      localVersion.current += 1;
+      // Mirror the new memory's connections onto its targets.
+      setMemories((prev) => withUpdatedMemory([newMemory, ...prev], newMemory, []));
       setIsSaving(false);
       return true;
     }
@@ -173,7 +206,10 @@ export function useMemories() {
       });
       const json: SaveResult = await res.json();
       if (json.success && json.data) {
-        setMemories((prev) => [json.data!.memory, ...prev]);
+        const saved = json.data.memory;
+        localVersion.current += 1;
+        // The server mirrored the connections; reflect that on the targets too.
+        setMemories((prev) => withUpdatedMemory([saved, ...prev], saved, []));
         return true;
       } else {
         setError(json.error ?? 'Failed to save.');
@@ -185,29 +221,18 @@ export function useMemories() {
     } finally {
       setIsSaving(false);
     }
-  }, []);
+  }, [isDemo]);
 
   const update = useCallback(async (input: UpdateMemoryInput): Promise<boolean> => {
     if (!input.id) return false;
     setError(null);
 
-    if (IS_DEMO) {
+    if (isDemo) {
+      localVersion.current += 1;
       setMemories((prev) => {
         const target = prev.find((m) => m.id === input.id);
         if (!target) return prev;
-        const updated = applyLocalUpdate(target, input);
-        const prevLinks = target.linkedMemoryIds ?? [];
-        const nextLinks = updated.linkedMemoryIds ?? [];
-        const added = nextLinks.filter((id) => !prevLinks.includes(id));
-        const removed = prevLinks.filter((id) => !nextLinks.includes(id));
-        return prev.map((m) => {
-          if (m.id === updated.id) return updated;
-          if (added.includes(m.id)) return withConnection(m, updated.id);
-          if (removed.includes(m.id)) {
-            return { ...m, linkedMemoryIds: (m.linkedMemoryIds ?? []).filter((x) => x !== updated.id) };
-          }
-          return m;
-        });
+        return withUpdatedMemory(prev, applyLocalUpdate(target, input), target.linkedMemoryIds ?? []);
       });
       return true;
     }
@@ -220,8 +245,18 @@ export function useMemories() {
       });
       const json: SaveResult = await res.json();
       if (json.success && json.data) {
-        const updated = json.data.memory;
-        setMemories((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+        const fromServer = json.data.memory;
+        localVersion.current += 1;
+        setMemories((prev) => {
+          const target = prev.find((m) => m.id === fromServer.id);
+          if (!target) return prev;
+          // An update response only carries `enrichment` when the edit changed it
+          // (a new URL). Otherwise keep what we had — replacing the memory
+          // wholesale used to wipe a link's preview on every connection edit.
+          const updated: MemoryData =
+            'enrichment' in fromServer ? fromServer : { ...fromServer, enrichment: target.enrichment };
+          return withUpdatedMemory(prev, updated, target.linkedMemoryIds ?? []);
+        });
         return true;
       } else {
         setError(json.error ?? 'Failed to update.');
@@ -231,21 +266,32 @@ export function useMemories() {
       setError('Network error. Please try again.');
       return false;
     }
-  }, []);
+  }, [isDemo]);
 
   /**
    * Re-open a link and rebuild its search index, then merge the fresh enrichment
    * in place. Used by the retry affordance on a link whose first read failed.
    */
   const reindex = useCallback(async (id: string): Promise<boolean> => {
-    if (IS_DEMO) return false;
+    if (isDemo) return false;
     setReindexingId(id);
     setError(null);
 
-    // Show the in-flight state on the card itself while the fetch runs.
+    // Show the in-flight state on the card itself while the fetch runs, keeping
+    // what we knew so it can be restored if nothing changes.
+    let previous: MemoryEnrichment | null | undefined;
+    localVersion.current += 1;
     setMemories((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, enrichment: { status: 'pending' as const } } : m))
+      prev.map((m) => {
+        if (m.id !== id) return m;
+        previous = m.enrichment;
+        return { ...m, enrichment: { status: 'pending' as const } };
+      })
     );
+    const settle = (enrichment: MemoryEnrichment | null | undefined) => {
+      localVersion.current += 1;
+      setMemories((prev) => prev.map((m) => (m.id === id ? { ...m, enrichment } : m)));
+    };
 
     try {
       const res = await fetch('/api/memories/reindex', {
@@ -256,29 +302,28 @@ export function useMemories() {
       const json: SaveResult = await res.json();
       if (json.success && json.data) {
         const updated = json.data.memory;
+        localVersion.current += 1;
         setMemories((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
         return true;
       }
       setError(json.error ?? 'Failed to re-read this link.');
-      // Reflect the failure on the card rather than leaving it stuck on pending.
-      setMemories((prev) =>
-        prev.map((m) =>
-          m.id === id
-            ? { ...m, enrichment: { status: 'failed' as const, error: json.error ?? null } }
-            : m
-        )
-      );
+      if (res.status === 503) {
+        // Indexing is switched off for this deployment — nothing was attempted,
+        // so the link is exactly as it was.
+        settle(previous);
+      } else {
+        // Reflect the failure on the card rather than leaving it stuck on pending.
+        settle({ ...previous, status: 'failed', error: json.error ?? null });
+      }
       return false;
     } catch {
       setError('Network error. Please try again.');
-      setMemories((prev) =>
-        prev.map((m) => (m.id === id ? { ...m, enrichment: { status: 'failed' as const } } : m))
-      );
+      settle({ ...previous, status: 'failed' });
       return false;
     } finally {
       setReindexingId(null);
     }
-  }, []);
+  }, [isDemo]);
 
   return {
     memories,

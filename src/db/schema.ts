@@ -88,6 +88,7 @@ export const memoryIndex = pgTable('memory_index', {
   keywords: text('keywords').array().notNull().default(sql`ARRAY[]::text[]`),
   /** Everything above, flattened — the text that FTS and the embedding derive from. */
   searchText: text('search_text'),
+  embeddingModel: text('embedding_model'),
   /** Why the last attempt failed; null once a run succeeds. */
   error: text('error'),
   fetchedAt: timestamp('fetched_at', { withTimezone: true }),

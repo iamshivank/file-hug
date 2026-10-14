@@ -73,6 +73,54 @@ export async function createOrder(
   };
 }
 
+export interface RazorpayOrderDetails extends RazorpayOrder {
+  /** Server-set at order creation (`userId`, `plan`) — trustworthy, unlike client input. */
+  notes: Record<string, string>;
+}
+
+/**
+ * Razorpay serialises an empty `notes` as `[]` rather than `{}`. Normalise to a
+ * plain string map so lookups like `notes.plan` behave the same either way.
+ */
+export function normalizeNotes(notes: unknown): Record<string, string> {
+  if (!notes || typeof notes !== 'object' || Array.isArray(notes)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(notes as Record<string, unknown>)) {
+    if (typeof value === 'string') out[key] = value;
+  }
+  return out;
+}
+
+/**
+ * Fetch an order from Razorpay — the authoritative record of what was bought
+ * and for whom. Throws when Razorpay is not configured or the API errors.
+ */
+export async function fetchOrder(orderId: string): Promise<RazorpayOrderDetails> {
+  if (!isRazorpayConfigured()) {
+    throw new Error('Razorpay is not configured.');
+  }
+
+  const res = await fetch(`${ORDERS_ENDPOINT}/${encodeURIComponent(orderId)}`, {
+    headers: { Authorization: basicAuthHeader() },
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Razorpay order lookup failed (${res.status}): ${detail}`);
+  }
+
+  const order = (await res.json()) as RazorpayOrder & { notes?: unknown };
+  return {
+    id: order.id,
+    amount: order.amount,
+    currency: order.currency,
+    receipt: order.receipt,
+    status: order.status,
+    notes: normalizeNotes(order.notes),
+  };
+}
+
 /** Constant-time comparison of two hex/ascii signature strings. */
 function safeEqual(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);

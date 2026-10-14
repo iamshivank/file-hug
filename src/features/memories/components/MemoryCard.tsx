@@ -46,7 +46,10 @@ export default function MemoryCard({
 
   // For URL cards the first two tags are platform/subtype (shown elsewhere);
   // for notes, drop the implicit "note" tag from the chip row.
-  const extraTags = (isUrl ? memory.tags.slice(2) : memory.tags.filter((t) => t !== 'note')).slice(0, 3);
+  const extraTags = [...new Set([
+    ...(isUrl ? memory.tags.slice(2) : memory.tags.filter((t) => t !== 'note')),
+    ...(memory.enrichment?.keywords ?? []),
+  ])].slice(0, 3);
 
   const enrichment = memory.enrichment;
   const state = enrichmentState(enrichment);

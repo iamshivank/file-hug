@@ -8,9 +8,10 @@
 -- `npm run db:push`). Run that FIRST, then this migration, which only adds the
 -- two columns Drizzle cannot express plus their indexes.
 --
--- IMPORTANT: vector(384) must match the service's EMBED_DIM env var (see the
--- same note in 001_intelligence.sql). Switching to OpenAI embeddings means
--- EMBED_DIM=1536 here and in 001, then re-running the indexer.
+-- OpenAI requests dimensions=EMBED_DIM (default 384), matching these columns.
+-- scripts/migrate.py rewrites vector(384) to vector(EMBED_DIM) when applying;
+-- edit the number yourself if you run this file by hand with another EMBED_DIM.
+-- See AI_SETUP.md before changing dimensions on an existing database.
 --
 -- This migration is additive and idempotent.
 

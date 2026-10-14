@@ -3,6 +3,7 @@ import { memoryService } from '@/features/memories/services/MemoryService';
 import { getSession, getSessionToken } from '@/features/auth/session';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const maxDuration = 180;
 
 /**
  * `POST /api/memories/reindex` — re-open a saved link and rebuild its search index.
@@ -44,6 +45,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const result = await memoryService.reindex(id, userId, token);
 
     if (!result.success) {
+      // Not configured is a first-class "off" state (503, like the proxy), not
+      // an outage (502).
+      if (result.error?.includes('not configured')) {
+        return NextResponse.json({ ...result, configured: false }, { status: 503 });
+      }
       const status = result.error?.includes('not found') ? 404 :
                      result.error?.includes('unavailable') ? 502 : 400;
       return NextResponse.json(result, { status });

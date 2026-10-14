@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-import { verifyWebhookSignature } from '@/features/billing/razorpay';
+import {
+  fetchOrder,
+  isRazorpayConfigured,
+  normalizeNotes,
+  verifyWebhookSignature,
+} from '@/features/billing/razorpay';
 import { activateSubscription, findUserIdByOrderId } from '@/features/billing/subscriptionWrite';
 import type { PlanId } from '@/features/billing/plans';
 
@@ -17,7 +22,8 @@ import type { PlanId } from '@/features/billing/plans';
 interface RazorpayEntity {
   order_id?: string;
   id?: string;
-  notes?: Record<string, string>;
+  /** A string map — or `[]` when empty (Razorpay's PHP heritage). */
+  notes?: unknown;
 }
 
 interface RazorpayWebhookPayload {
@@ -58,15 +64,33 @@ export async function POST(request: NextRequest) {
 
   const orderId = paymentEntity?.order_id ?? orderEntity?.id;
   const paymentId = paymentEntity?.id ?? '';
-  const notes = paymentEntity?.notes ?? orderEntity?.notes ?? {};
 
   if (!orderId) {
     // Nothing to reconcile against — acknowledge to avoid retries.
     return NextResponse.json({ success: true, ignored: true });
   }
 
+  // Our `userId`/`plan` live on the ORDER's notes. A payment's own notes are
+  // usually empty — and Razorpay sends an empty map as `[]`, which is not
+  // nullish, so `paymentNotes ?? orderNotes` used to pick the empty payment
+  // notes and never activate anything. Merge instead, order notes winning.
+  let notes = {
+    ...normalizeNotes(paymentEntity?.notes),
+    ...normalizeNotes(orderEntity?.notes),
+  };
+  // `payment.captured` carries no order entity at all — read the order itself.
+  if ((!isPlanId(notes.plan) || !notes.userId) && isRazorpayConfigured()) {
+    try {
+      notes = { ...notes, ...(await fetchOrder(orderId)).notes };
+    } catch (err) {
+      console.error('[billing/webhook] order lookup failed:', err);
+      // Non-2xx makes Razorpay retry, which is what we want for a transient failure.
+      return NextResponse.json({ success: false, error: 'Order lookup failed.' }, { status: 502 });
+    }
+  }
+
   // Prefer the userId from the order notes; fall back to the stored order row.
-  const notesUserId = typeof notes.userId === 'string' ? notes.userId : null;
+  const notesUserId = typeof notes.userId === 'string' && notes.userId ? notes.userId : null;
   const userId = notesUserId ?? (await findUserIdByOrderId(orderId));
   const plan = isPlanId(notes.plan) ? notes.plan : null;
 
