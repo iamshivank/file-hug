@@ -3,7 +3,7 @@
 Two implementations are provided:
 
 * :class:`OpenAIEmbedder` — uses the OpenAI ``text-embedding-3-small`` model
-  (1536 dims). Only selected when ``OPENAI_API_KEY`` is present.
+  (configured dimensions). Only selected when ``OPENAI_API_KEY`` is present.
 * :class:`HashingEmbedder` — a deterministic, network-free fallback that hashes
   tokens into a fixed-dimension L2-normalized vector. This is the default and
   guarantees the service works with no API key configured.
@@ -15,6 +15,7 @@ The active dimension is exposed via ``Embedder.dim`` so the migration and the
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import math
 import re
@@ -80,33 +81,41 @@ class HashingEmbedder(Embedder):
 
 
 class OpenAIEmbedder(Embedder):
-    """OpenAI-backed embedder using ``text-embedding-3-small`` (1536 dims)."""
+    """OpenAI-backed embedder using ``text-embedding-3-small`` (configured dimensions)."""
 
-    def __init__(self, api_key: str, model: str = "text-embedding-3-small") -> None:
+    def __init__(self, api_key: str, model: str = "text-embedding-3-small", dim: int = 384) -> None:
         # Imported lazily so the dependency is optional.
         from openai import AsyncOpenAI
 
-        self.dim = 1536
+        self.dim = dim
         self.model = model
-        self._client = AsyncOpenAI(api_key=api_key)
+        self._client = AsyncOpenAI(api_key=api_key, timeout=20, max_retries=1)
+
+    @staticmethod
+    def _tokenize_sync(text: str) -> list[int]:
+        import tiktoken
+        return tiktoken.get_encoding('cl100k_base').encode(text or ' ')
 
     async def embed(self, text: str) -> list[float]:
+        # Token-bounded chunks avoid the API input limit for long/multilingual pages.
+        # Tokenizing is CPU-bound and tiktoken's first call downloads its BPE file,
+        # so keep both off the event loop.
+        tokens = await asyncio.to_thread(self._tokenize_sync, text)
+        chunks = [tokens[i:i + 6000] for i in range(0, len(tokens), 6000)]
         result = await self._client.embeddings.create(
-            model=self.model,
-            input=text or " ",
+            model=self.model, dimensions=self.dim, input=chunks,
         )
-        return list(result.data[0].embedding)
+        ordered = sorted(result.data, key=lambda item: item.index)
+        if len(ordered) != len(chunks) or any(len(i.embedding) != self.dim for i in ordered):
+            # e.g. a model that ignores `dimensions` — never store a mis-sized vector.
+            raise ValueError(f'Embedding response does not match {len(chunks)} x {self.dim}')
+        vec =[sum(item.embedding[j] * len(chunks[i]) for i, item in enumerate(ordered))
+               / len(tokens) for j in range(self.dim)]
+        norm = math.sqrt(sum(v * v for v in vec))
+        return [v / norm for v in vec] if norm else vec
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        if not texts:
-            return []
-        result = await self._client.embeddings.create(
-            model=self.model,
-            input=[t or " " for t in texts],
-        )
-        # Preserve input order (OpenAI returns items with an ``index`` field).
-        ordered = sorted(result.data, key=lambda d: d.index)
-        return [list(item.embedding) for item in ordered]
+        return [await self.embed(text) for text in texts]
 
 
 _embedder_singleton: Embedder | None = None
@@ -128,16 +137,16 @@ def get_embedder(settings: Settings | None = None) -> Embedder:
     settings = settings or get_settings()
 
     if settings.OPENAI_API_KEY:
-        embedder = OpenAIEmbedder(api_key=settings.OPENAI_API_KEY)
-        if embedder.dim != settings.EMBED_DIM:
-            raise ValueError(
-                f"OpenAIEmbedder dimension ({embedder.dim}) does not match "
-                f"EMBED_DIM configuration ({settings.EMBED_DIM}). "
-                f"Update EMBED_DIM={embedder.dim} in your environment and run "
-                f"migration 002_update_vector_dimension.sql to alter the database schema."
-            )
+        embedder = OpenAIEmbedder(api_key=settings.OPENAI_API_KEY,
+                                 model=settings.OPENAI_EMBEDDING_MODEL, dim=settings.EMBED_DIM)
         _embedder_singleton = embedder
     else:
         _embedder_singleton = HashingEmbedder(dim=settings.EMBED_DIM)
 
     return _embedder_singleton
+
+
+def embedding_model() -> str:
+    settings = get_settings()
+    return (f'{settings.OPENAI_EMBEDDING_MODEL}:{settings.EMBED_DIM}'
+            if settings.OPENAI_API_KEY else f'hashing:{settings.EMBED_DIM}')

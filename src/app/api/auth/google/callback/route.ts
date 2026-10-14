@@ -8,41 +8,46 @@ const PLAN_COOKIE = 'fh_auth_plan';
 
 /**
  * Upsert the Google user into the `users` table when a DB is configured.
- * Returns the persisted user id, or null when no DB is available (or on error),
- * in which case the caller falls back to the Google subject id.
+ * Returns the persisted user id, or null when no DB is configured, in which case
+ * the caller falls back to the Google subject id.
+ *
+ * Throws when a DB IS configured but the write fails: falling back to the Google
+ * subject id there would mint a session for an id with no `users` row, whose
+ * saves land under an id the account will never see again once the DB recovers.
  */
 async function upsertUser(profile: GoogleProfile): Promise<string | null> {
   if (!process.env.DATABASE_URL) return null;
-  try {
-    const { db } = await import('@/lib/db');
-    const { users } = await import('@/db/schema');
-    const { eq } = await import('drizzle-orm');
+  const { db } = await import('@/lib/db');
+  const { users } = await import('@/db/schema');
+  const { eq, sql } = await import('drizzle-orm');
 
-    const existing = await db.select().from(users).where(eq(users.email, profile.email)).limit(1);
-    if (existing.length > 0) {
-      const [updated] = await db
-        .update(users)
-        .set({ name: profile.name, image: profile.image ?? null, googleId: profile.id })
-        .where(eq(users.email, profile.email))
-        .returning({ id: users.id });
-      return updated?.id ?? existing[0].id;
-    }
-
-    const [inserted] = await db
-      .insert(users)
-      .values({
-        email: profile.email,
-        name: profile.name,
-        image: profile.image ?? null,
-        googleId: profile.id,
-        isDemo: false,
-      })
-      .returning({ id: users.id });
-    return inserted?.id ?? null;
-  } catch (error) {
-    console.error('[auth] Failed to upsert Google user:', error);
-    return null;
+  // Case-insensitive, so an address stored before emails were lower-cased still
+  // resolves to the same account.
+  const existing = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(sql`lower(${users.email}) = ${profile.email}`)
+    .limit(1);
+  if (existing.length > 0) {
+    await db
+      .update(users)
+      .set({ name: profile.name, image: profile.image ?? null, googleId: profile.id })
+      .where(eq(users.id, existing[0].id));
+    return existing[0].id;
   }
+
+  const [inserted] = await db
+    .insert(users)
+    .values({
+      email: profile.email,
+      name: profile.name,
+      image: profile.image ?? null,
+      googleId: profile.id,
+      isDemo: false,
+    })
+    .returning({ id: users.id });
+  if (!inserted) throw new Error('Insert returned no row');
+  return inserted.id;
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {

@@ -20,7 +20,7 @@ import { INTELLIGENCE_SERVICE_URL, isIntelligenceEnabled } from './intelligenceC
 export { isIntelligenceEnabled };
 
 /** Indexing opens a real page; allow for a slow origin but never hang a request. */
-const INDEX_TIMEOUT_MS = 20_000;
+const INDEX_TIMEOUT_MS = 120_000;
 
 export interface IndexResult {
   memoryId: string;
@@ -113,7 +113,7 @@ export async function indexMemory(
 
     return toIndexResult((await res.json()) as RawIndexResponse);
   } catch (error) {
-    // Service down, DNS failure, or the 20s timeout elapsed.
+    // Service down, DNS failure, or the timeout elapsed.
     const reason = error instanceof Error ? error.message : 'unknown error';
     console.warn(`[intelligence] index ${memoryId} unavailable: ${reason}`);
     return null;

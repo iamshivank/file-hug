@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { INTELLIGENCE_SERVICE_URL } from '@/features/memories/services/intelligenceConfig';
 
+export const maxDuration = 180;
+
 /**
  * Thin proxy to the standalone FastAPI "memory intelligence" service
  * (services/intelligence). It strips the `/api/intelligence` prefix and forwards
@@ -33,12 +35,18 @@ async function proxy(request: NextRequest, path: string[]): Promise<NextResponse
     return NextResponse.json({ success: false, error: 'Unauthorized.' }, { status: 401 });
   }
 
-  const target = `${INTELLIGENCE_SERVICE_URL}/${path.join('/')}${request.nextUrl.search}`;
+  // Next hands us *decoded* segments, so `%2F..%2F` arrives as `/../` and `%3F`
+  // as `?`. Re-encode each segment and refuse dot segments, so a request can
+  // only ever address a path beneath the configured service base URL.
+  if (path.some((segment) => segment === '.' || segment === '..' || segment === '')) {
+    return NextResponse.json({ success: false, error: 'Not found.' }, { status: 404 });
+  }
+  const target = `${INTELLIGENCE_SERVICE_URL}/${path.map(encodeURIComponent).join('/')}${request.nextUrl.search}`;
   const headers: Record<string, string> = { authorization: `Bearer ${token}` };
   const contentType = request.headers.get('content-type');
   if (contentType) headers['content-type'] = contentType;
 
-  const init: RequestInit = { method: request.method, headers };
+  const init: RequestInit = { method: request.method, headers, cache: 'no-store', signal: AbortSignal.timeout(120_000) };
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     init.body = await request.text();
   }

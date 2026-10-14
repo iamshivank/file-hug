@@ -4,6 +4,8 @@ import {
   UpdateMemoryInput,
   SaveResult,
   FetchResult,
+  MemoryData,
+  MemoryEnrichment,
 } from '@/features/memories/types/memory.types';
 import { detectContent } from '@/features/memories/utils/urlDetection';
 import { isIntelligenceEnabled } from '@/features/memories/services/intelligenceConfig';
@@ -15,6 +17,28 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 /** Max number of memories a single memory may be connected to. */
 const MAX_CONNECTIONS = 25;
+
+/**
+ * True when an optional text field holds something other than a string. Request
+ * bodies are untyped JSON, and calling `.trim()` on a number would throw out of
+ * the service instead of returning a validation error.
+ */
+function isBadText(value: unknown): boolean {
+  return value !== undefined && value !== null && typeof value !== 'string';
+}
+
+/** Shared shape check for save/update bodies. Returns an error message or null. */
+function invalidInput(input: unknown): string | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return 'Invalid request body.';
+  const { content, title, tags, linkedMemoryIds } = input as Record<string, unknown>;
+  if (isBadText(content)) return 'Content must be text.';
+  if (isBadText(title)) return 'Title must be text.';
+  if (tags !== undefined && tags !== null && !Array.isArray(tags)) return 'Tags must be a list.';
+  if (linkedMemoryIds !== undefined && linkedMemoryIds !== null && !Array.isArray(linkedMemoryIds)) {
+    return 'Connections must be a list of memory ids.';
+  }
+  return null;
+}
 
 function noteTitleFrom(body: string): string {
   const firstLine = body.trim().split('\n')[0].trim();
@@ -33,6 +57,14 @@ function cleanTags(tags?: string[]): string[] {
 
 export class MemoryService {
   async save(input: SaveMemoryInput, userId?: string): Promise<SaveResult> {
+    // Writes no-op without a user — an anonymous or demo save would otherwise
+    // insert an orphan row (user_id NULL) that no reader ever returns.
+    if (!userId) {
+      return { success: false, error: 'Sign in to save memories.' };
+    }
+    const invalid = invalidInput(input);
+    if (invalid) return { success: false, error: invalid };
+
     // Notes are unlimited and may be title-only (empty body). Handle them first
     // so an empty body doesn't trip the link-path "content required" check.
     if (input.type === 'note') {
@@ -69,6 +101,9 @@ export class MemoryService {
           .returning();
 
         // Mirror the connection onto every linked memory within the same transaction.
+        // The cap uses cardinality(), not array_length(): array_length of an empty
+        // array is NULL, so `< 25` was never true for a memory with no connections
+        // yet and the mirror was silently skipped.
         for (const linkedId of linkedMemoryIds) {
           await tx.execute((await import('drizzle-orm')).sql`
             UPDATE memories
@@ -76,7 +111,7 @@ export class MemoryService {
             WHERE id = ${linkedId}
               AND user_id = ${userId}
               AND NOT (${newMemory.id} = ANY(linked_memory_ids))
-              AND array_length(linked_memory_ids, 1) < 25
+              AND cardinality(linked_memory_ids) < 25
           `);
         }
 
@@ -100,6 +135,11 @@ export class MemoryService {
     // all work off a URL they can parse.
     const detected = detectContent(rawContent);
     const { type, url } = detected;
+    // An explicit `type: 'url'` is a claim, not a hint — don't quietly file
+    // unparseable text as a note.
+    if (input.type === 'url' && type !== 'url') {
+      return { success: false, error: 'A valid link is required.' };
+    }
     const content = type === 'url' ? url : rawContent;
     const customTitle = input.title?.trim();
     if (customTitle && customTitle.length > 200) {
@@ -149,7 +189,7 @@ export class MemoryService {
           WHERE id = ${linkedId}
             AND user_id = ${userId}
             AND NOT (${newMemory.id} = ANY(linked_memory_ids))
-            AND array_length(linked_memory_ids, 1) < 25
+            AND cardinality(linked_memory_ids) < 25
         `);
       }
 
@@ -188,7 +228,9 @@ export class MemoryService {
   }
 
   async update(input: UpdateMemoryInput, userId?: string): Promise<SaveResult> {
-    if (!input.id || !UUID_REGEX.test(input.id)) {
+    const invalid = invalidInput(input);
+    if (invalid) return { success: false, error: invalid };
+    if (typeof input.id !== 'string' || !UUID_REGEX.test(input.id)) {
       return { success: false, error: 'A valid memory id is required.' };
     }
 
@@ -205,7 +247,7 @@ export class MemoryService {
 
     const patch: { content?: string; title?: string; linkedMemoryIds?: string[] } = {};
 
-    if (input.content !== undefined) {
+    if (input.content != null) {
       const content = input.content.trim();
       if (content.length > 5000) {
         return { success: false, error: 'Content must be under 5000 characters.' };
@@ -214,10 +256,16 @@ export class MemoryService {
       if (content.length === 0 && existing.type === 'url') {
         return { success: false, error: 'A link is required.' };
       }
-      patch.content = content;
+      if (existing.type === 'url') {
+        const detected = detectContent(content);
+        if (detected.type !== 'url') return { success: false, error: 'A valid link is required.' };
+        patch.content = detected.url;
+      } else {
+        patch.content = content;
+      }
     }
 
-    if (input.title !== undefined) {
+    if (input.title != null) {
       const fallbackBody = patch.content ?? existing.content;
       const title = input.title.trim() || noteTitleFrom(fallbackBody);
       if (title.length > 200) {
@@ -228,9 +276,14 @@ export class MemoryService {
 
     // Connections are bidirectional and apply to both notes and links. Diff the
     // requested set against the stored set and mirror each change on the other side.
-    if (input.linkedMemoryIds !== undefined) {
-      const nextIds = await this.resolveLinkedIds(input.linkedMemoryIds, userId, existing.id);
+    // A link whose URL actually changed needs its index rebuilt — the stored
+    // page title, description and embedding describe the old page.
+    const urlChanged =
+      existing.type === 'url' && patch.content !== undefined && patch.content !== existing.content;
+
+    if (input.linkedMemoryIds != null) {
       const prevIds = existing.linkedMemoryIds ?? [];
+      const nextIds = await this.resolveLinkedIds(input.linkedMemoryIds, userId, existing.id, prevIds);
       const added = nextIds.filter((id) => !prevIds.includes(id));
       const removed = prevIds.filter((id) => !nextIds.includes(id));
 
@@ -264,7 +317,7 @@ export class MemoryService {
             WHERE id = ${id}
               AND user_id = ${userId}
               AND NOT (${existing.id} = ANY(linked_memory_ids))
-              AND array_length(linked_memory_ids, 1) < 25
+              AND cardinality(linked_memory_ids) < 25
           `);
         }
         for (const id of removed) {
@@ -278,7 +331,7 @@ export class MemoryService {
         return updated;
       });
 
-      return { success: true, data: { memory } };
+      return { success: true, data: { memory: await this.withIndexReset(memory, userId, urlChanged) } };
     }
 
     if (Object.keys(patch).length === 0) {
@@ -289,16 +342,75 @@ export class MemoryService {
     if (!memory) {
       return { success: false, error: 'Memory not found.' };
     }
-    return { success: true, data: { memory } };
+    return { success: true, data: { memory: await this.withIndexReset(memory, userId, urlChanged) } };
+  }
+
+  /**
+   * After a link's URL changes, clear what was learned about the old page.
+   *
+   * With the intelligence service configured the row goes back to `pending` (the
+   * caller then triggers a fresh index, exactly as after a save). Without it, the
+   * row is removed — the feature is off, so the link should look un-indexed, not
+   * failed. Best-effort either way: the edit itself already succeeded, and a
+   * missing `memory_index` table must never turn it into an error.
+   */
+  private async withIndexReset(
+    memory: MemoryData,
+    userId: string,
+    urlChanged: boolean
+  ): Promise<MemoryData> {
+    if (!urlChanged) return memory;
+    let enrichment: MemoryEnrichment | null = null;
+    try {
+      if (isIntelligenceEnabled()) {
+        await memoryRepository.resetIndex(memory.id, userId, memory.content);
+        enrichment = { status: 'pending' };
+      } else {
+        await memoryRepository.deleteIndex(memory.id, userId);
+      }
+    } catch (error) {
+      console.warn('[memories] could not reset the link index after an edit.', error);
+    }
+    return { ...memory, enrichment };
+  }
+
+  /**
+   * Index a saved link in the background and record a failure if the service
+   * never answered. Never throws — this runs inside `after()`, where a rejection
+   * would surface as an unhandled error with nobody to report it to.
+   */
+  async indexLink(
+    memoryId: string,
+    userId: string,
+    sessionToken: string,
+    options: { force?: boolean } = {}
+  ): Promise<void> {
+    const { indexMemory } = await import('./IntelligenceClient');
+    const indexed = await indexMemory(memoryId, sessionToken, options);
+    if (indexed) return;
+    try {
+      await memoryRepository.markIndexFailed(memoryId, userId);
+    } catch (error) {
+      console.warn(`[memories] could not mark ${memoryId} as failed.`, error);
+    }
   }
 
   /**
    * Keep only ids that point to real memories the user owns (max MAX_CONNECTIONS),
    * excluding `selfId`. Both notes and links may be connected — the relationship
    * is an undirected graph, so we no longer restrict targets to link (url) type.
+   *
+   * A *new* connection to a memory that is already at the cap is dropped: the
+   * mirror write would be refused, leaving a one-sided connection. Ids in
+   * `alreadyLinked` are kept as-is.
    * REQUIRES a defined `userId` — returns empty array when userId is absent.
    */
-  private async resolveLinkedIds(ids?: string[], userId?: string, selfId?: string): Promise<string[]> {
+  private async resolveLinkedIds(
+    ids?: string[],
+    userId?: string,
+    selfId?: string,
+    alreadyLinked: string[] = []
+  ): Promise<string[]> {
     if (!userId || !Array.isArray(ids) || ids.length === 0) return [];
     const unique = [
       ...new Set(
@@ -307,7 +419,13 @@ export class MemoryService {
     ].slice(0, MAX_CONNECTIONS);
     if (unique.length === 0) return [];
     const found = await memoryRepository.findByIds(unique, userId);
-    return found.map((m) => m.id);
+    return found
+      .filter((m) => {
+        if (alreadyLinked.includes(m.id)) return true;
+        const theirs = m.linkedMemoryIds ?? [];
+        return (selfId !== undefined && theirs.includes(selfId)) || theirs.length < MAX_CONNECTIONS;
+      })
+      .map((m) => m.id);
   }
 
   async getAll(userId?: string): Promise<FetchResult> {
@@ -351,6 +469,11 @@ export class MemoryService {
     }
     if (memory.type !== 'url') {
       return { success: false, error: 'Only links can be indexed.' };
+    }
+    // Switched off is a deployment choice, not an outage — say so rather than
+    // reporting the service as unavailable.
+    if (!isIntelligenceEnabled()) {
+      return { success: false, error: 'Link intelligence is not configured for this deployment.' };
     }
 
     // Import indexMemory here to avoid circular dependencies

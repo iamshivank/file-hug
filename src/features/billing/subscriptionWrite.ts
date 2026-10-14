@@ -96,13 +96,36 @@ export async function activateSubscription(input: ActivateInput): Promise<boolea
     const { subscriptions } = await import('@/db/schema');
     const { eq } = await import('drizzle-orm');
     const now = new Date();
-    const currentPeriodEnd = new Date(now.getTime() + THIRTY_DAYS_MS);
 
     const existing = await db
       .select()
       .from(subscriptions)
       .where(eq(subscriptions.userId, input.userId))
       .limit(1);
+
+    const current = existing[0];
+    // The verify route and the webhook both activate the same payment, and
+    // Razorpay retries webhooks — applying one payment twice must not grant a
+    // second month.
+    if (
+      current &&
+      current.status === 'active' &&
+      input.razorpayPaymentId &&
+      current.razorpayPaymentId === input.razorpayPaymentId
+    ) {
+      return true;
+    }
+    // Paying again before the period ends extends it rather than discarding the
+    // days already paid for.
+    const periodStart =
+      current &&
+      current.status === 'active' &&
+      current.plan === input.plan &&
+      current.currentPeriodEnd &&
+      current.currentPeriodEnd > now
+        ? current.currentPeriodEnd
+        : now;
+    const currentPeriodEnd = new Date(periodStart.getTime() + THIRTY_DAYS_MS);
 
     if (existing.length > 0) {
       await db

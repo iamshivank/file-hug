@@ -28,12 +28,16 @@ import ipaddress
 import re
 import socket
 from dataclasses import dataclass, field
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse, urlsplit
 
 import httpx
 from bs4 import BeautifulSoup
 
-_FETCH_TIMEOUT = 8.0  # seconds, total
+_FETCH_TIMEOUT = 8.0  # seconds, per network operation (connect / each read)
+#: Wall-clock budget for the whole fetch, redirects included. httpx timeouts are
+#: per operation, so without this a server trickling a byte every few seconds
+#: could hold a fetch open indefinitely.
+_TOTAL_FETCH_TIMEOUT = 25.0
 _MAX_REDIRECTS = 5
 _USER_AGENT = (
     "Mozilla/5.0 (compatible; FileHugBot/1.0; +https://filehug.app) "
@@ -56,7 +60,21 @@ _YOUTUBE_HOSTS = {
     "m.youtube.com",
     "youtu.be",
     "music.youtube.com",
+    "www.youtube-nocookie.com",
 }
+
+_YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+
+#: Matches ``varchar(200)`` on ``memory_index.site_name`` / ``.author``.
+_MAX_SHORT_FIELD = 200
+
+#: Cloud metadata endpoints that sit on otherwise-public addresses.
+_BLOCKED_IPS = {
+    ipaddress.ip_address("168.63.129.16"),  # Azure wireserver / metadata
+}
+
+#: NAT64 well-known prefix -- an address here embeds an IPv4 target.
+_NAT64_PREFIX = ipaddress.ip_network("64:ff9b::/96")
 
 #: Elements whose text is chrome, not content.
 _BOILERPLATE_TAGS = [
@@ -93,61 +111,91 @@ class ExtractedPage:
     transcript: str | None = None
     error: str | None = None
 
-    def is_empty(self) -> bool:
-        """True when nothing usable was extracted (all signals missing)."""
-        return not any(
-            (self.title, self.description, self.text, self.transcript, self.site_name)
-        )
+
+def is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """True for any address a server-side fetch must never reach.
+
+    Anything not globally routable is refused, which covers private, loopback,
+    link-local (incl. 169.254.169.254), CGNAT/shared space (100.64.0.0/10, home of
+    Alibaba's 100.100.100.200 metadata service), benchmarking and reserved ranges.
+    IPv4 targets smuggled inside IPv6 (``::ffff:a.b.c.d``, NAT64) are unwrapped and
+    checked as IPv4.
+    """
+    if isinstance(ip, ipaddress.IPv6Address):
+        if ip.ipv4_mapped is not None:
+            ip = ip.ipv4_mapped
+        elif ip in _NAT64_PREFIX:
+            ip = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+    return (
+        not ip.is_global
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_private
+        or ip in _BLOCKED_IPS
+    )
 
 
 def is_safe_url(url: str) -> tuple[bool, str | None, str | None]:
     """Validate scheme and resolve the hostname to check for SSRF risks.
 
     Returns ``(is_safe, error_message, resolved_ip)``. Only http/https are allowed.
-    Private, loopback, link-local, multicast, reserved and cloud-metadata IPs are
-    rejected. The resolved IP should be pinned for the actual HTTP request to prevent
-    DNS rebinding attacks.
+    A host is refused if ANY of its resolved addresses is non-public (see
+    :func:`is_blocked_ip`). The returned IP must be pinned for the actual request
+    to prevent DNS rebinding.
+
+    Blocking (DNS): call it via ``asyncio.to_thread`` from async code. Never
+    raises: malformed URLs/hostnames are reported as unsafe.
     """
-    parsed = urlparse(url)
-    scheme = parsed.scheme.lower() if parsed.scheme else ""
-
-    if scheme not in ("http", "https"):
-        return False, f"Unsupported scheme: {scheme or '(none)'}", None
-
-    hostname = parsed.hostname
-    if not hostname:
-        return False, "Missing hostname", None
-
     try:
-        addr_info = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
-    except (socket.gaierror, socket.error) as exc:
-        return False, f"DNS resolution failed: {exc}", None
+        parsed = urlparse(url)
+        scheme = parsed.scheme.lower() if parsed.scheme else ""
 
-    # Use the first resolved IP
+        if scheme not in ("http", "https"):
+            return False, f"Unsupported scheme: {scheme or '(none)'}", None
+
+        hostname = parsed.hostname
+        if not hostname:
+            return False, "Missing hostname", None
+        _ = parsed.port  # raises ValueError for an invalid port
+
+        addr_info = socket.getaddrinfo(
+            hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM
+        )
+    except OSError as exc:  # socket.gaierror is an OSError
+        return False, f"DNS resolution failed: {exc}", None
+    except (ValueError, UnicodeError) as exc:
+        # Bad IPv6 literal, out-of-range port, un-encodable (IDNA) hostname, ...
+        return False, f"Invalid URL: {exc}", None
+
     resolved_ip = None
     for _family, _, _, _, sockaddr in addr_info:
         ip_str = sockaddr[0]
         try:
-            ip = ipaddress.ip_address(ip_str)
+            ip = ipaddress.ip_address(ip_str.split("%", 1)[0])
         except ValueError:
             continue  # skip malformed addresses
 
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
+        if is_blocked_ip(ip):
             return False, f"Blocked private/internal IP: {ip}", None
-
-        # Cloud metadata services (Azure is 168.63.129.16, not link-local, so needs explicit check).
-        # AWS/GCP/DigitalOcean 169.254.169.254 is already caught by is_link_local.
-        if str(ip) == "168.63.129.16":
-            return False, f"Blocked metadata service IP: {ip}", None
 
         # Keep the first valid IP for pinning
         if resolved_ip is None:
-            resolved_ip = ip_str
+            resolved_ip = str(ip)
 
     if resolved_ip is None:
         return False, "No valid IP address resolved", None
 
     return True, None, resolved_ip
+
+
+def _ascii_host(hostname: str) -> str:
+    """IDNA-encode a hostname for use in the Host header / SNI (ASCII-only)."""
+    try:
+        return hostname.encode("idna").decode("ascii")
+    except UnicodeError:
+        return hostname
 
 
 def _meta(soup: BeautifulSoup, *, prop: str | None = None, name: str | None = None) -> str | None:
@@ -178,19 +226,17 @@ def extract_youtube_id(url: str) -> str | None:
     if host not in _YOUTUBE_HOSTS:
         return None
 
+    vid: str | None
     if host == "youtu.be":
         vid = parsed.path.lstrip("/").split("/")[0]
-        return vid or None
+    else:
+        # `parsed.query` has no leading "?", so parse it rather than regex "[?&]v=".
+        vid = (parse_qs(parsed.query).get("v") or [None])[0]
+        if not vid:
+            match = re.search(r"/(?:embed|shorts|v|live)/([^/?&]+)", parsed.path)
+            vid = match.group(1) if match else None
 
-    match = re.search(r"[?&]v=([^&]+)", parsed.query)
-    if match:
-        return match.group(1)
-
-    match = re.search(r"/(?:embed|shorts|v|live)/([^/?&]+)", parsed.path)
-    if match:
-        return match.group(1)
-
-    return None
+    return vid if vid and _YOUTUBE_ID_RE.match(vid) else None
 
 
 def _fetch_transcript_sync(video_id: str) -> str | None:
@@ -198,8 +244,8 @@ def _fetch_transcript_sync(video_id: str) -> str | None:
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
 
-        segments = YouTubeTranscriptApi.get_transcript(video_id)
-        text = " ".join(seg.get("text", "") for seg in segments).strip()
+        segments = YouTubeTranscriptApi().fetch(video_id)
+        text = " ".join(seg.text for seg in segments).strip()
         return text[:MAX_TRANSCRIPT_CHARS] or None
     except Exception:
         # Any failure (no captions, disabled, network, API change) -> None.
@@ -244,9 +290,18 @@ def _keywords(soup: BeautifulSoup) -> list[str]:
     return unique[:20]
 
 
-def _parse_html(url: str, html: str) -> ExtractedPage:
-    """Parse metadata and body text out of an HTML document."""
-    soup = BeautifulSoup(html, "html.parser")
+def _parse_html(
+    url: str, html: str | bytes, encoding: str | None = None
+) -> ExtractedPage:
+    """Parse metadata and body text out of an HTML document.
+
+    Pass raw ``bytes`` (with the Content-Type charset, if any) so BeautifulSoup can
+    honour the declared encoding or ``<meta charset>`` instead of assuming UTF-8.
+    """
+    if isinstance(html, bytes):
+        soup = BeautifulSoup(html, "html.parser", from_encoding=encoding)
+    else:
+        soup = BeautifulSoup(html, "html.parser")
 
     title = _first(
         _meta(soup, prop="og:title"),
@@ -263,6 +318,8 @@ def _parse_html(url: str, html: str) -> ExtractedPage:
         _meta(soup, name="twitter:image"),
     )
     site_name = _meta(soup, prop="og:site_name")
+    if site_name:
+        site_name = site_name[:_MAX_SHORT_FIELD]
     author = _first(
         _meta(soup, name="author"),
         _meta(soup, prop="article:author"),
@@ -299,109 +356,126 @@ def _parse_html(url: str, html: str) -> ExtractedPage:
         image=image,
         site_name=site_name,
         favicon=favicon,
-        author=author[:200] if author else None,
+        author=author[:_MAX_SHORT_FIELD] if author else None,
         keywords=keywords,
         text=text,
     )
 
 
+async def _fetch_html(url: str, resolved_ip: str) -> ExtractedPage:
+    """Fetch ``url`` (already validated, pinned to ``resolved_ip``) and parse it.
+
+    Redirects are followed manually; every hop is re-validated and re-pinned.
+    Raises on network/HTTP/content errors; :func:`fetch_page` converts those.
+    """
+    # The pinned IP replaces the hostname in the request URL; the Host header and
+    # TLS SNI (and so certificate verification) keep the real hostname.
+    transport = httpx.AsyncHTTPTransport(retries=0)
+
+    async with httpx.AsyncClient(
+        timeout=_FETCH_TIMEOUT,
+        follow_redirects=False,  # followed manually so each hop is re-validated
+        headers={"User-Agent": _USER_AGENT},
+        transport=transport,
+    ) as client:
+        current_url = url
+        current_resolved_ip = resolved_ip
+
+        for _ in range(_MAX_REDIRECTS + 1):
+            # urlsplit (not urlparse) so ";params" stay part of the path.
+            parts = urlsplit(current_url)
+            current_hostname = _ascii_host(parts.hostname or "")
+            port_suffix = f":{parts.port}" if parts.port else ""
+            ip_host = (
+                f"[{current_resolved_ip}]" if ":" in current_resolved_ip else current_resolved_ip
+            )
+            ip_url = f"{parts.scheme}://{ip_host}{port_suffix}{parts.path}"
+            if parts.query:
+                ip_url += f"?{parts.query}"
+            host_header = (
+                f"[{current_hostname}]" if ":" in current_hostname else current_hostname
+            )
+
+            async with client.stream(
+                "GET",
+                ip_url,
+                headers={"Host": f"{host_header}{port_suffix}"},
+                extensions={"sni_hostname": current_hostname},
+            ) as resp:
+                if resp.status_code not in (301, 302, 303, 307, 308):
+                    if resp.status_code >= 400:
+                        # Not raise_for_status(): its message embeds the pinned-IP
+                        # URL, which would end up stored and shown to the user.
+                        raise ValueError(f"HTTP {resp.status_code}")
+
+                    # Validate Content-Type before reading the body
+                    content_type = resp.headers.get("content-type", "").lower()
+                    if not any(t in content_type for t in ("text/html", "application/xhtml")):
+                        raise ValueError(f"Non-HTML content type: {content_type or '(none)'}")
+
+                    # Stream the response body with a size limit
+                    chunks = []
+                    total_size = 0
+                    async for chunk in resp.aiter_bytes():
+                        total_size += len(chunk)
+                        if total_size > _MAX_BODY_BYTES:
+                            raise ValueError(f"Response body exceeds {_MAX_BODY_BYTES} bytes")
+                        chunks.append(chunk)
+
+                    return _parse_html(current_url, b"".join(chunks), resp.charset_encoding)
+
+                redirect_url = resp.headers.get("location")
+                if not redirect_url:
+                    raise ValueError("Redirect response missing Location header")
+
+            redirect_url = urljoin(current_url, redirect_url)
+
+            safe, safety_error, redirect_ip = await asyncio.to_thread(is_safe_url, redirect_url)
+            if not safe:
+                return ExtractedPage(url=url, error=f"Unsafe redirect: {safety_error}")
+
+            current_url = redirect_url
+            current_resolved_ip = redirect_ip
+
+    return ExtractedPage(url=url, error="Too many redirects")
+
+
 async def fetch_page(url: str) -> ExtractedPage:
     """Fetch ``url`` and extract everything we can, including a YouTube transcript.
 
-    Never raises for a network/parse failure — the returned page carries an
+    Never raises for a network/parse failure: the returned page carries an
     ``error`` string and whatever partial data was obtained.
     """
     url = url.strip()
     if not url:
         return ExtractedPage(url=url, error="Empty URL")
 
-    safe, safety_error, resolved_ip = is_safe_url(url)
+    # DNS resolution blocks; keep it off the event loop.
+    safe, safety_error, resolved_ip = await asyncio.to_thread(is_safe_url, url)
     if not safe:
         return ExtractedPage(url=url, error=f"Unsafe URL: {safety_error}")
 
     result: ExtractedPage
     try:
-        # Parse the URL to build the IP-pinned version
-        parsed = urlparse(url)
-        hostname = parsed.hostname or ""
-        port = parsed.port
-
-        # Build transport that pins to the resolved IP
-        # We'll override the destination but preserve the Host header and SNI
-        transport = httpx.HTTPTransport(retries=0)
-
-        async with httpx.AsyncClient(
-            timeout=_FETCH_TIMEOUT,
-            follow_redirects=False,  # followed manually so each hop is re-validated
-            headers={"User-Agent": _USER_AGENT, "Host": hostname},
-            transport=transport,
-        ) as client:
-            current_url = url
-            current_hostname = hostname
-            current_resolved_ip = resolved_ip
-
-            for _ in range(_MAX_REDIRECTS + 1):
-                # Build URL using the resolved IP instead of hostname
-                parsed_current = urlparse(current_url)
-                port_suffix = f":{parsed_current.port}" if parsed_current.port else ""
-                ip_url = f"{parsed_current.scheme}://{current_resolved_ip}{port_suffix}{parsed_current.path}"
-                if parsed_current.query:
-                    ip_url += f"?{parsed_current.query}"
-                if parsed_current.fragment:
-                    ip_url += f"#{parsed_current.fragment}"
-
-                # Make the request with the IP URL but preserve Host header, streaming response
-                async with client.stream("GET", ip_url, headers={"Host": current_hostname}) as resp:
-                    if resp.status_code not in (301, 302, 303, 307, 308):
-                        resp.raise_for_status()
-
-                        # Validate Content-Type before reading the body
-                        content_type = resp.headers.get("content-type", "").lower()
-                        if not any(html_type in content_type for html_type in ["text/html", "application/xhtml"]):
-                            raise ValueError(f"Non-HTML content type: {content_type}")
-
-                        # Stream the response body with a size limit
-                        chunks = []
-                        total_size = 0
-                        async for chunk in resp.aiter_bytes():
-                            total_size += len(chunk)
-                            if total_size > _MAX_BODY_BYTES:
-                                raise ValueError(f"Response body exceeds {_MAX_BODY_BYTES} bytes")
-                            chunks.append(chunk)
-
-                        html = b"".join(chunks).decode("utf-8", errors="replace")
-                        result = _parse_html(current_url, html)
-                        break
-
-                    redirect_url = resp.headers.get("location")
-                    if not redirect_url:
-                        raise ValueError("Redirect response missing Location header")
-
-                redirect_url = urljoin(current_url, redirect_url)
-
-                safe, safety_error, redirect_ip = is_safe_url(redirect_url)
-                if not safe:
-                    return ExtractedPage(url=url, error=f"Unsafe redirect: {safety_error}")
-
-                current_url = redirect_url
-                current_hostname = urlparse(redirect_url).hostname or ""
-                current_resolved_ip = redirect_ip
-            else:
-                return ExtractedPage(url=url, error="Too many redirects")
-
-    except Exception as exc:  # network error, timeout, non-2xx, parse error
-        result = ExtractedPage(url=url, error=f"Fetch failed: {exc}")
+        result = await asyncio.wait_for(
+            _fetch_html(url, resolved_ip), timeout=_TOTAL_FETCH_TIMEOUT
+        )
+    except asyncio.TimeoutError:
+        result = ExtractedPage(url=url, error="Fetch failed: timed out")
+    except Exception as exc:  # network error, non-2xx, parse error
+        result = ExtractedPage(url=url, error=f"Fetch failed: {exc or type(exc).__name__}")
 
     # The original URL stays the identity of the memory; `final_url` records where
     # a share link actually resolved to.
     result.url = url
 
     # Attempt a transcript whenever we can identify a video id, even if metadata
-    # parsing failed — captions alone still make the memory searchable.
+    # parsing failed -- captions alone still make the memory searchable.
     video_id = extract_youtube_id(result.final_url or url) or extract_youtube_id(url)
     if video_id:
         try:
-            result.transcript = await asyncio.to_thread(_fetch_transcript_sync, video_id)
+            result.transcript = await asyncio.wait_for(
+                asyncio.to_thread(_fetch_transcript_sync, video_id), timeout=10)
         except Exception:
             result.transcript = None
 

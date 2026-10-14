@@ -5,11 +5,10 @@
 --   * a nullable `embedding vector(N)` column
 --   * a GIN index for full-text search and an IVFFlat index for vector search
 --
--- IMPORTANT: the vector dimension below (384) MUST match the service's
--- EMBED_DIM env var. Default 384 corresponds to the local HashingEmbedder.
--- If you switch to OpenAI (text-embedding-3-small, dim 1536), set EMBED_DIM=1536
--- AND change vector(384) -> vector(1536) here (and drop/recreate the column
--- + index), then re-run scripts/backfill_embeddings.py.
+-- OpenAI requests dimensions=EMBED_DIM (default 384), matching these columns.
+-- scripts/migrate.py rewrites vector(384) to vector(EMBED_DIM) when applying;
+-- edit the number yourself if you run this file by hand with another EMBED_DIM.
+-- See AI_SETUP.md before changing dimensions on an existing database.
 --
 -- This migration is additive only. It does NOT recreate any app tables.
 

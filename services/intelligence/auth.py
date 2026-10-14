@@ -5,7 +5,7 @@ Verifies the signed session token issued by the Next.js app. The token format is
     <payloadB64url>.<signatureB64url>
 
 where ``payloadB64url`` is base64url(JSON.stringify({id, name, email, image,
-isDemo})) and ``signatureB64url`` is base64url(HMAC_SHA256(AUTH_SECRET,
+isDemo, exp})) and ``signatureB64url`` is base64url(HMAC_SHA256(AUTH_SECRET,
 payloadB64url)). The signature is compared in constant time.
 
 The token is accepted from EITHER the ``fh_session`` cookie OR an
@@ -19,6 +19,8 @@ import base64
 import hashlib
 import hmac
 import json
+import math
+import time
 
 from fastapi import Depends, HTTPException, Request, status
 from pydantic import BaseModel
@@ -61,60 +63,67 @@ def _extract_token(request: Request) -> str | None:
 def verify_token(token: str, secret: str) -> SessionUser:
     """Verify a session token and return the SessionUser.
 
-    Raises ``ValueError`` if the token is malformed or the signature is invalid.
+    Mirrors ``verifyToken`` in ``src/features/auth/session.ts``: exactly one ``.``,
+    a signature that is byte-for-byte the canonical base64url HMAC (so padded or
+    junk-laden variants of a valid signature are rejected, as they are in Next),
+    and a numeric, finite, future ``exp`` in epoch seconds.
+
+    Raises ``ValueError`` if the token is malformed, expired, or the signature is
+    invalid. Never raises anything else for attacker-controlled input.
     """
-    try:
-        payload_b64, signature_b64 = token.split(".", 1)
-    except ValueError as exc:  # not exactly one separator
-        raise ValueError("Malformed token") from exc
-
-    if not payload_b64 or not signature_b64:
+    parts = token.split(".")
+    if len(parts) != 2 or not parts[0] or not parts[1]:
         raise ValueError("Malformed token")
+    payload_b64, signature_b64 = parts
 
-    expected_sig = hmac.new(
-        secret.encode("utf-8"),
-        payload_b64.encode("utf-8"),
-        hashlib.sha256,
-    ).digest()
+    if not secret:
+        raise ValueError("No signing secret configured")
 
-    try:
-        provided_sig = _b64url_decode(signature_b64)
-    except (ValueError, TypeError) as exc:
-        raise ValueError("Invalid signature encoding") from exc
+    expected_sig = _b64url_encode(
+        hmac.new(
+            secret.encode("utf-8"),
+            payload_b64.encode("utf-8"),
+            hashlib.sha256,
+        ).digest()
+    )
 
-    # Constant-time comparison.
-    if not hmac.compare_digest(expected_sig, provided_sig):
+    # Constant-time comparison of the canonical encodings. Non-ASCII input can't
+    # be a valid signature; encode leniently so it simply fails the compare.
+    if not hmac.compare_digest(
+        expected_sig.encode("ascii"), signature_b64.encode("utf-8", "replace")
+    ):
         raise ValueError("Signature mismatch")
 
     try:
-        payload_raw = _b64url_decode(payload_b64)
-        payload = json.loads(payload_raw)
-    except (ValueError, TypeError, json.JSONDecodeError) as exc:
+        payload = json.loads(_b64url_decode(payload_b64))
+    except (ValueError, TypeError) as exc:  # binascii/JSON/Unicode errors
         raise ValueError("Invalid payload") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid payload")
 
     user_id = payload.get("id")
-    if not user_id:
+    if not isinstance(user_id, str) or not user_id:
         raise ValueError("Payload missing id")
 
-    # Validate expiration timestamp.
+    # Validate expiration timestamp (epoch seconds). bool is an int subclass and
+    # NaN/inf compare oddly, so require a real finite number.
     exp = payload.get("exp")
     if exp is None:
         raise ValueError("Token missing exp claim")
-    try:
-        exp_timestamp = float(exp)
-    except (ValueError, TypeError) as exc:
-        raise ValueError("Token exp claim is malformed") from exc
-
-    import time
-    now = time.time()
-    if exp_timestamp <= now:
+    if isinstance(exp, bool) or not isinstance(exp, (int, float)) or not math.isfinite(exp):
+        raise ValueError("Token exp claim is malformed")
+    if exp <= time.time():
         raise ValueError("Token has expired")
 
+    def _opt_str(key: str) -> str | None:
+        value = payload.get(key)
+        return value if isinstance(value, str) else None
+
     return SessionUser(
-        id=str(user_id),
-        email=payload.get("email"),
-        name=payload.get("name"),
-        is_demo=bool(payload.get("isDemo", False)),
+        id=user_id,
+        email=_opt_str("email"),
+        name=_opt_str("name"),
+        is_demo=payload.get("isDemo") is True,
     )
 
 

@@ -4,12 +4,7 @@ import type { NextRequest } from 'next/server';
 import { getSession } from '@/features/auth/session';
 import { createOrder, isRazorpayConfigured } from '@/features/billing/razorpay';
 import { recordPendingOrder } from '@/features/billing/subscriptionWrite';
-
-/** Paid plan → amount in paise. Keep in sync with `@/features/billing/plans`. */
-const PLAN_AMOUNTS: Record<'pro' | 'ai', number> = {
-  pro: 9900, // ₹99
-  ai: 19900, // ₹199
-};
+import { PLANS } from '@/features/billing/plans';
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
@@ -50,7 +45,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const amount = PLAN_AMOUNTS[plan];
+  // Paise, derived from the plan table so checkout and /verify's amount check
+  // can never disagree.
+  const amount = PLANS[plan].priceInr * 100;
   const receipt = `fh_${plan}_${session.user.id}_${Date.now()}`.slice(0, 40);
 
   try {

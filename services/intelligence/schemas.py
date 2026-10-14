@@ -11,7 +11,9 @@ from pydantic import BaseModel, Field
 # /extract
 # ---------------------------------------------------------------------------
 class ExtractRequest(BaseModel):
-    url: str = Field(..., description="The URL to fetch and extract metadata from.")
+    url: str = Field(
+        ..., max_length=2048, description="The URL to fetch and extract metadata from."
+    )
 
 
 class ExtractResponse(BaseModel):
@@ -37,7 +39,9 @@ class ExtractResponse(BaseModel):
 # /index
 # ---------------------------------------------------------------------------
 class IndexRequest(BaseModel):
-    memory_id: str = Field(..., description="Id of the link memory to index.")
+    memory_id: str = Field(
+        ..., min_length=1, max_length=200, description="Id of the link memory to index."
+    )
     force: bool = Field(
         default=False,
         description="Re-index even when a ready row already exists for this memory.",
@@ -76,9 +80,9 @@ class SearchResult(BaseModel):
     matched: list[str] = Field(
         default_factory=list,
         description=(
-            "Which signals ranked this result: 'fts'/'semantic' over the saved "
-            "title+content, 'index_fts'/'index_semantic' over the extracted page "
-            "content, or 'ilike' from the substring fallback."
+            "Which signals ranked this result: 'fts' over the saved title+content, "
+            "'index_fts'/'index_semantic' over the extracted page content, 'ilike' "
+            "from the substring fallback, plus 'ai' when the AI reranker kept it."
         ),
     )
     #: A short excerpt of the extracted page content, when the link was indexed.
@@ -86,12 +90,13 @@ class SearchResult(BaseModel):
 
 
 class SearchResponse(BaseModel):
+    notice: str | None = None
     query: str
     count: int
     mode: str = Field(
         description=(
-            "Effective search mode: 'hybrid' (two or more signals), 'semantic', "
-            "'fts', or 'ilike'."
+            "Effective search mode: 'ai' (AI-reranked), 'hybrid' (two or more "
+            "signals), 'semantic', 'fts', or 'ilike'."
         )
     )
     #: True when at least one signal came from the extracted link index.

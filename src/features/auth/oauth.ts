@@ -77,17 +77,25 @@ export async function exchangeGoogleCode(
     sub?: string;
     name?: string;
     email?: string;
+    email_verified?: boolean;
     picture?: string;
   };
 
   if (!profile.sub || !profile.email) {
     throw new Error('Google profile is missing a subject id or email.');
   }
+  // Accounts are matched by email, so an unverified address would let someone
+  // sign in as whoever already owns that email here (including password users).
+  if (profile.email_verified !== true) {
+    throw new Error('Google account email is not verified.');
+  }
 
   return {
     id: profile.sub,
-    name: profile.name ?? profile.email,
-    email: profile.email,
+    // `users.name` is varchar(200).
+    name: (profile.name || profile.email).slice(0, 200),
+    // Stored and matched lower-cased, like email/password sign-up.
+    email: profile.email.trim().toLowerCase(),
     image: profile.picture ?? null,
   };
 }

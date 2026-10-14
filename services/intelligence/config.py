@@ -8,9 +8,10 @@ development — embeddings default to the local ``HashingEmbedder``. In producti
 
 from __future__ import annotations
 
-import os
+from pathlib import Path
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,7 +23,9 @@ class Settings(BaseSettings):
     """Runtime settings for the intelligence service."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(Path(__file__).resolve().parents[2] / '.env',
+                  Path(__file__).resolve().parents[2] / '.env.local',
+                  Path(__file__).resolve().parent / '.env'),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -35,13 +38,29 @@ class Settings(BaseSettings):
 
     # Optional — enables OpenAIEmbedder when present.
     OPENAI_API_KEY: str | None = None
+    OPENAI_CHAT_MODEL: str = "gpt-4.1-mini"
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
 
     # Active embedding dimension. MUST match the vector(N) column in the migration.
     # Default 384 matches HashingEmbedder.
     EMBED_DIM: int = 384
 
-    # CORS origin for the Next.js frontend.
+    # CORS origin(s) for the Next.js frontend; comma-separated for several.
     ALLOWED_ORIGIN: str = "http://localhost:3000"
+
+    # Explicit opt-in to the DEV_AUTH_SECRET fallback. Read through settings (not
+    # os.environ) so it also works when set in one of the .env files above.
+    LOCAL_DEV_MODE: bool = False
+
+    @field_validator("AUTH_SECRET", "OPENAI_API_KEY", mode="before")
+    @classmethod
+    def _empty_is_unset(cls, value: object) -> object:
+        # `AUTH_SECRET=` in a .env file means "unset" -- exactly how the Next.js app
+        # treats it (it falls back to the dev secret). Accepting "" here would sign
+        # with an empty HMAC key that no Next.js token matches and anyone can forge.
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
 
 @lru_cache
@@ -51,7 +70,7 @@ def get_settings() -> Settings:
 
     # In local development mode (explicit opt-in), allow DEV_AUTH_SECRET fallback.
     # In production, AUTH_SECRET MUST be provided.
-    local_dev_mode = os.getenv("LOCAL_DEV_MODE", "").lower() in ("1", "true", "yes")
+    local_dev_mode = settings.LOCAL_DEV_MODE
 
     if settings.AUTH_SECRET is None:
         if local_dev_mode:

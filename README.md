@@ -1,5 +1,8 @@
 # File Hug 🫂
 
+**AI setup:** See [AI_SETUP.md](AI_SETUP.md) for where to put `OPENAI_API_KEY`,
+how to start the intelligence service, apply migrations and index existing links.
+
 **Never lose something you wanted to remember.**
 
 File Hug is an AI-powered memory system for everything you discover online.
