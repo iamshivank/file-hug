@@ -698,33 +698,6 @@ body:has(.lp-root) {
 .lp-nav-actions { justify-self: end; display: flex; align-items: center; gap: 12px; }
 .lp-nav-signin { font-size: 14px; font-weight: 550; color: var(--muted-light); transition: color 0.2s; }
 .lp-nav-signin:hover { color: var(--foreground); }
-.lp-nav-user {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 10px 3px 3px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  font-size: 14px;
-  font-weight: 550;
-  color: var(--muted-light);
-  transition: color 0.2s, border-color 0.2s, background-color 0.2s;
-}
-.lp-nav-user:hover { color: var(--foreground); border-color: var(--border-strong); background: var(--surface-hover); }
-.lp-nav-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  display: inline-grid;
-  place-items: center;
-  object-fit: cover;
-  font-size: 11px;
-  font-weight: 650;
-  color: var(--primary-light);
-  background: color-mix(in srgb, var(--primary) 15%, transparent);
-  border: 1px solid var(--border-strong);
-}
-.lp-nav-user-name { max-width: 9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ----- Hero (pinned, scroll-driven) ----- */
 .lp-hero { position: relative; height: 330svh; }
@@ -1456,8 +1429,6 @@ body:has(.lp-root) {
 
 @media (max-width: 560px) {
   .lp-nav-signin { display: none; }
-  .lp-nav-user { padding-right: 3px; }
-  .lp-nav-user-name { display: none; }
   .lp-stats { gap: 8px; }
   .lp-stats > div { padding: 10px 12px; }
   .lp-hits { min-height: 0; }

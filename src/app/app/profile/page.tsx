@@ -5,6 +5,7 @@ import type { Metadata } from 'next';
 import { ArrowLeft, Check, Sparkles } from 'lucide-react';
 
 import { getSession } from '@/features/auth/session';
+import SignOutButton from '@/features/auth/SignOutButton';
 import { getUserPlan } from '@/features/billing/subscription';
 import { PLANS } from '@/features/billing/plans';
 import UpgradeOptions from './UpgradeOptions';
@@ -59,7 +60,7 @@ export default async function ProfilePage() {
           </div>
         )}
 
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2.5 flex-wrap">
             <h1 className="font-display text-2xl sm:text-3xl text-foreground truncate">
               {user.name}
@@ -72,6 +73,8 @@ export default async function ProfilePage() {
           </div>
           <p className="text-muted-light text-sm mt-0.5 truncate">{user.email}</p>
         </div>
+
+        <SignOutButton className="shrink-0" />
       </header>
 
       {/* Your plan */}

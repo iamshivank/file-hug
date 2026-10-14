@@ -12,6 +12,9 @@ import {
   Sparkles,
 } from 'lucide-react';
 import ThemeToggle from '@/features/theme/ThemeToggle';
+import { AuthProvider } from '@/features/auth/AuthProvider';
+import UserMenu from '@/features/auth/UserMenu';
+import type { SessionUser } from '@/features/auth/session';
 import { PLAN_LIST, type Plan, type PlanId } from '@/features/billing/plans';
 import HeroExperience from './hero/HeroExperience';
 import PlatformOrbit from './PlatformOrbit';
@@ -20,16 +23,8 @@ import TiltCard from './TiltCard';
 
 /** The signed-in visitor, resolved on the server. Null for visitors and demo sessions. */
 export interface LandingViewer {
-  name: string;
-  image: string | null;
+  user: SessionUser;
   plan: PlanId;
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 function Mark({ size = 15 }: { size?: number }) {
@@ -57,17 +52,10 @@ function Nav({ viewer }: { viewer: LandingViewer | null }) {
         <ThemeToggle />
         {viewer ? (
           <>
-            <Link href="/app/profile" className="lp-nav-user" title={`Signed in as ${viewer.name}`}>
-              {viewer.image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={viewer.image} alt="" width={28} height={28} className="lp-nav-avatar" />
-              ) : (
-                <span className="lp-nav-avatar" aria-hidden="true">
-                  {initials(viewer.name)}
-                </span>
-              )}
-              <span className="lp-nav-user-name">{viewer.name.split(/\s+/)[0]}</span>
-            </Link>
+            {/* Same account menu as the app — Profile and Sign out. */}
+            <AuthProvider initialUser={viewer.user}>
+              <UserMenu />
+            </AuthProvider>
             <Link href="/app" className="lp-btn lp-btn-primary lp-btn-sm">
               Open library
             </Link>
