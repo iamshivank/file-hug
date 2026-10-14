@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(git push origin main)",
+      "Bash(git push origin main *)",
+      "Bash(git push * main)",
+      "Bash(git push * main *)",
+      "Bash(git push *:main)",
+      "Bash(git push *:main *)",
+      "Bash(git push *refs/heads/main*)",
+      "Bash(git push --all*)",
+      "Bash(git push * --all*)",
+      "Bash(git push --mirror*)",
+      "Bash(git push * --mirror*)",
+      "Bash(*--no-verify*)",
+      "Bash(gh pr merge * --admin*)",
+      "Bash(gh api *rulesets*)",
+      "PowerShell(git push origin main)",
+      "PowerShell(git push origin main *)",
+      "PowerShell(git push * main)",
+      "PowerShell(git push * main *)",
+      "PowerShell(git push *:main)",
+      "PowerShell(git push *:main *)",
+      "PowerShell(git push *refs/heads/main*)",
+      "PowerShell(git push --all*)",
+      "PowerShell(git push * --all*)",
+      "PowerShell(git push --mirror*)",
+      "PowerShell(git push * --mirror*)",
+      "PowerShell(*--no-verify*)",
+      "PowerShell(gh pr merge * --admin*)",
+      "PowerShell(gh api *rulesets*)",
+      "Edit(.githooks/**)",
+      "Edit(.github/rulesets/**)",
+      "Edit(.claude/settings.json)"
+    ]
+  }
+}

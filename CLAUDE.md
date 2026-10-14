@@ -318,6 +318,7 @@ as the baseline; don't let a change add to it.
 6. **Ownership:** every memory query is scoped by `userId`. Reads return empty rather than leaking; writes no-op without a user.
 7. **Adding a platform:** add an entry to `utils/platforms.ts`, a rule to `utils/urlDetection.ts`, optionally an embed case in `utils/embed.ts` and a glyph in `PlatformIcon.tsx` (`hasIcon: true`). Grouping picks it up automatically.
 8. **Session tokens carry `exp`.** The Python service rejects tokens without it — don't remove the claim from `session.ts`.
+9. **Never commit or push to `main`.** Every change goes on a branch and lands through a pull request — for people and for Claude alike. GitHub enforces it (the "Protect main" ruleset, defined in `.github/rulesets/protect-main.json`), `.githooks/pre-push` refuses locally, and `.claude/settings.json` denies the push commands. Don't try to work around any of these (`--no-verify`, `--admin`, editing the ruleset or the hook); if a change seems to need it, ask the user.
 
 ---
 
