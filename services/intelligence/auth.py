@@ -5,7 +5,7 @@ Verifies the signed session token issued by the Next.js app. The token format is
     <payloadB64url>.<signatureB64url>
 
 where ``payloadB64url`` is base64url(JSON.stringify({id, name, email, image,
-isDemo, exp})) and ``signatureB64url`` is base64url(HMAC_SHA256(AUTH_SECRET,
+isDemo, exp, sid?})) and ``signatureB64url`` is base64url(HMAC_SHA256(AUTH_SECRET,
 payloadB64url)). The signature is compared in constant time.
 
 The token is accepted from EITHER the ``fh_session`` cookie OR an
@@ -19,13 +19,17 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import math
 import time
 
 from fastapi import Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
+import db
 from config import Settings, get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class SessionUser(BaseModel):
@@ -35,6 +39,8 @@ class SessionUser(BaseModel):
     email: str | None = None
     name: str | None = None
     is_demo: bool = False
+    #: Id of the app's ``sessions`` row for this sign-in, when it has one.
+    sid: str | None = None
 
 
 def _b64url_decode(data: str) -> bytes:
@@ -124,7 +130,36 @@ def verify_token(token: str, secret: str) -> SessionUser:
         email=_opt_str("email"),
         name=_opt_str("name"),
         is_demo=payload.get("isDemo") is True,
+        sid=_opt_str("sid"),
     )
+
+
+async def _session_revoked(user: SessionUser) -> bool:
+    """True when the app has revoked this sign-in (user signed the device out).
+
+    Mirrors the Next app's rule: only tokens carrying a ``sid`` are checked, and if
+    the check can't run (no pool, ``sessions`` table not created yet, a transient
+    DB error) the signed token is trusted rather than locking everyone out.
+    """
+    if not user.sid or user.is_demo:
+        return False
+    try:
+        pool = db.get_pool()
+    except RuntimeError:
+        return False
+    try:
+        row = await pool.fetchrow(
+            """
+            SELECT 1 FROM sessions
+            WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL AND expires_at > now()
+            """,
+            user.sid,
+            user.id,
+        )
+    except Exception:  # noqa: BLE001 — degrade to the signature check alone
+        logger.warning("Session revocation check failed; trusting the signed token", exc_info=True)
+        return False
+    return row is None
 
 
 async def get_current_user(
@@ -140,9 +175,16 @@ async def get_current_user(
         )
 
     try:
-        return verify_token(token, settings.AUTH_SECRET)
+        user = verify_token(token, settings.AUTH_SECRET)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid session token",
         ) from exc
+
+    if await _session_revoked(user):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session has been signed out",
+        )
+    return user

@@ -96,7 +96,46 @@ export const memoryIndex = pgTable('memory_index', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * One row per signed-in browser/device. The session cookie carries this row's id
+ * as `sid`; a token whose row is missing, revoked or expired is refused, which is
+ * what lets a user sign out other devices. Demo sessions never get a row.
+ */
+export const sessions = pgTable('sessions', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  userAgent: text('user_agent'),
+  ip: varchar('ip', { length: 64 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+});
+
+export const feedbackKindEnum = pgEnum('feedback_kind', ['bug', 'idea', 'praise', 'other']);
+
+/** Feedback left from the landing page or the app. Anonymous is allowed. */
+export const feedback = pgTable('feedback', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+  email: varchar('email', { length: 255 }),
+  kind: feedbackKindEnum('kind').notNull().default('other'),
+  message: text('message').notNull(),
+  /** Where it was sent from, e.g. `landing` or `app`. */
+  source: varchar('source', { length: 32 }),
+  userAgent: text('user_agent'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type MemoryRow = typeof memories.$inferSelect;
+export type SessionRow = typeof sessions.$inferSelect;
+export type FeedbackRow = typeof feedback.$inferSelect;
 export type MemoryIndexRow = typeof memoryIndex.$inferSelect;
 export type UserRow = typeof users.$inferSelect;
 export type SubscriptionRow = typeof subscriptions.$inferSelect;

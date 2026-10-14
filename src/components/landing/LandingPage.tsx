@@ -253,6 +253,7 @@ export default function LandingPage() {
           <a href="#pricing">Pricing</a>
           <Link href="/app">Library</Link>
           <Link href="/login">Sign in</Link>
+          <Link href="/feedback?from=landing">Feedback</Link>
         </nav>
       </footer>
     </div>

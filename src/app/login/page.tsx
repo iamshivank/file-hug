@@ -1,6 +1,9 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { Heart, ArrowLeft } from 'lucide-react';
 import CredentialsForm from '@/features/auth/CredentialsForm';
+import SignedInRedirect from '@/features/auth/SignedInRedirect';
+import { getSession } from '@/features/auth/session';
 
 export const metadata = {
   title: 'Sign in — File Hug',
@@ -38,9 +41,18 @@ export default async function LoginPage({
   const requested = (await searchParams).plan;
   const plan = requested === 'pro' || requested === 'ai' ? requested : null;
   const googleHref = plan ? `/api/auth/google?plan=${plan}` : '/api/auth/google';
+  const destination = plan ? `/app/profile?plan=${plan}` : '/app';
+
+  // Already signed in (e.g. pressed Back from the app): go straight back in.
+  // Demo sessions may still sign in to a real account, so they see the form.
+  const session = await getSession();
+  if (session && !session.user.isDemo) {
+    redirect(destination);
+  }
 
   return (
     <div className="min-h-screen bg-background bg-dots flex flex-col">
+      <SignedInRedirect to={destination} />
       {/* Warm ambient glow */}
       <div className="glow-orb w-125 h-125 bg-primary -top-40 left-1/2 -translate-x-1/2 animate-pulse-glow pointer-events-none" />
 

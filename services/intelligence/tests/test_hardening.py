@@ -21,7 +21,7 @@ import httpx  # noqa: E402
 
 import db  # noqa: E402
 import extraction  # noqa: E402
-from auth import SessionUser, verify_token  # noqa: E402
+from auth import SessionUser, _session_revoked, verify_token  # noqa: E402
 from config import Settings  # noqa: E402
 from extraction import (  # noqa: E402
     _parse_html,
@@ -340,6 +340,47 @@ class MigrateTests(unittest.TestCase):
         self.assertIn("vector(1536)", rendered)
         self.assertNotIn("vector(384)", rendered)
         self.assertEqual(render(sql, 384), sql)
+
+
+class _RowPool:
+    def __init__(self, row=None, exc=None):
+        self.row, self.exc, self.calls = row, exc, []
+
+    async def fetchrow(self, sql, *args):
+        self.calls.append(args)
+        if self.exc:
+            raise self.exc
+        return self.row
+
+
+class SessionRevocationTests(unittest.IsolatedAsyncioTestCase):
+    def test_sid_is_parsed(self):
+        user = verify_token(sign(user_payload(sid="s1")), SECRET)
+        self.assertEqual(user.sid, "s1")
+        self.assertIsNone(verify_token(sign(user_payload()), SECRET).sid)
+
+    async def test_tokens_without_sid_and_demo_are_not_checked(self):
+        pool = _RowPool(row=None)
+        with patch("db.get_pool", return_value=pool):
+            self.assertFalse(await _session_revoked(SessionUser(id="u1")))
+            self.assertFalse(await _session_revoked(SessionUser(id="u1", sid="s1", is_demo=True)))
+        self.assertEqual(pool.calls, [])
+
+    async def test_live_row_passes_and_missing_row_is_revoked(self):
+        user = SessionUser(id="u1", sid="s1")
+        with patch("db.get_pool", return_value=_RowPool(row={"?column?": 1})):
+            self.assertFalse(await _session_revoked(user))
+        pool = _RowPool(row=None)
+        with patch("db.get_pool", return_value=pool):
+            self.assertTrue(await _session_revoked(user))
+        self.assertEqual(pool.calls[0], ("s1", "u1"))
+
+    async def test_unavailable_store_trusts_the_token(self):
+        user = SessionUser(id="u1", sid="s1")
+        with patch("db.get_pool", side_effect=RuntimeError("no pool")):
+            self.assertFalse(await _session_revoked(user))
+        with patch("db.get_pool", return_value=_RowPool(exc=Exception("relation does not exist"))):
+            self.assertFalse(await _session_revoked(user))
 
 
 if __name__ == "__main__":
