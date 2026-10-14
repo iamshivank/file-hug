@@ -118,3 +118,15 @@ The long-term goal is simple:
 ## Status
 
 Currently in active development.
+
+---
+
+## Contributing
+
+`main` is protected: nobody, including repo admins and AI assistants, can push to it directly. Every change goes through a pull request.
+
+1. Branch: `git switch -c my-change`
+2. Push the branch: `git push -u origin my-change`
+3. Open a pull request into `main` and merge it there.
+
+Direct pushes, force-pushes and deleting `main` are rejected by GitHub (the "Protect main" ruleset in `.github/rulesets/protect-main.json`). After `npm install`, a local pre-push hook in `.githooks/` also stops the push before it leaves your machine.
